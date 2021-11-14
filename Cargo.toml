@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["John Rollinson <code@jrolli.dev>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/jrolli/rtea"
+documentation = "https://docs.rs/rtea/"
 description = "Makes writing TCL extensions in Rust ergonomic."
 readme = "README.md"
 keywords = ["tcl", "tea", "rust"]

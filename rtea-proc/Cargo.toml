@@ -4,6 +4,7 @@ version = "1.0.0"
 authors = ["John Rollinson <code@jrolli.dev>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/jrolli/rtea"
+documentation = "https://docs.rs/rtea/"
 description = "Internal macro crate for rtea."
 readme = "README.md"
 edition = "2018"
