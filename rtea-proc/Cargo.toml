@@ -1,0 +1,12 @@
+[package]
+name = "rtea-proc"
+version = "1.0.0"
+authors = ["John Rollinson <code@jrolli.dev>"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/jrolli/rtea"
+description = "Internal macro crate for rtea."
+readme = "README.md"
+edition = "2018"
+
+[lib]
+proc_macro = true
