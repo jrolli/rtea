@@ -2,6 +2,30 @@ use proc_macro::TokenStream;
 use proc_macro::TokenTree::Punct;
 use std::str::FromStr;
 
+/// Helper for creating the initialization function for TCL extensions.
+///
+/// This macro will automatically create the appropriate wrapper to validate
+/// the interpreter and "provide" the package to the interpreter.  The
+/// prototype of the wrapped function should be ```rust fn
+/// (interp: &rtea::Interpreter) -> Result<rtea::TclStatus, String> ``` and
+/// one or two attributes should be passed to the macro.  The first must be
+/// the module's name with a capital first letter and all others lowercase
+/// (this is a TCL requirement).  The second, optional attribute, is the
+/// version which by TCL convention should be in accordance with semver.
+///
+/// # Example
+/// ```rust
+/// #[module_init(Example, "1.0.0")]
+/// fn init(interp: &Interpreter) -> Result<TclStatus, String> {
+///     interp.eval("Initializing module...")
+/// }
+/// ```
+///
+/// The above example will create a function named `Example_Init` (with the
+/// `no_mangle` attribute) which TCL will use as the initialization routine.
+/// This assumes that your files final library name matches the expectation
+/// of `-lexample` for the C linker (which is the case if used in a "cdylib"
+/// crate named "example").
 #[proc_macro_attribute]
 pub fn module_init(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut mod_name = None;
@@ -32,7 +56,6 @@ pub fn module_init(attr: TokenStream, item: TokenStream) -> TokenStream {
         } else if fn_name.is_none() && i.to_string() == "fn" {
             next_item = true;
         }
-        // println!("item: \"{:#?}\"", i);
         out_stream.extend([i]);
     }
     let fn_name = fn_name.expect("'module_init' macro not used on a function");

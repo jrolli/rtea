@@ -5,6 +5,17 @@ use std::os::raw::c_char;
 
 use crate::Object;
 
+/// A wrapper around a [TCL](https://www.tcl.tk) interpreter object.
+///
+/// This is a wrapper around the TCL interpreter object that leverages the
+/// Stubs interface.  It makes assumptions about the interface (such as
+/// stability of function pointers) that are made by the underlying stubs
+/// implementation.  However, as a deliberate nod to the importance of the
+/// borrow checker and other rust conventions, it obtains the stubs table on
+/// each `command` rather than caching the version passed during the call to
+/// an initialization routine.  While this sacrifices runtime performance
+/// (extra indirection), it fits more with Rust paradigms and should reduce
+/// the risk of trying to use the API without an associated interpeter.
 #[repr(C)]
 pub struct Interpreter {
     _legacy_result: *const c_void,
@@ -17,6 +28,12 @@ type CmdProc = fn(interp: &Interpreter, args: Vec<&str>) -> Result<TclStatus, St
 
 const TCL_STUB_MAGIC: u32 = 0xFCA3BACF; // TCL 8.x extension
 
+/// A wrapper for TCL return status codes.
+///
+/// This is a simple wrapper around the expected return codes for TCL
+/// commands.  `Ok` and `Error` are the most common ones, but the others have
+/// specific meanings under certain conditions (e.g., binding handlers in
+/// Tk).  See the appropriate documentation for specific behavior.
 #[repr(C)]
 #[derive(Debug, PartialEq)]
 pub enum TclStatus {
@@ -694,6 +711,10 @@ struct Stubs {
     _untranslated_function649: *const c_void, // 649
 }
 
+/// Error codes for unwrapping a TCL interpreter.
+///
+/// These exist primarily for debugging and advanced use-cases.  Unless you
+/// are calling [from_raw](Interpreter::from_raw), you should not need to worry about these.
 #[derive(Debug)]
 pub enum Error {
     NullInterpreter,
@@ -703,6 +724,11 @@ pub enum Error {
 }
 
 impl<'a> Interpreter {
+    /// Converts a raw pointer to a TCL interpreter into a Rust reference.
+    ///
+    /// Most users should not need to use this function because a reference is
+    /// already passed to the appropriate functions.  This is public because
+    /// of how the [module_init](rtea_proc::module_init) macro works.
     pub fn from_raw(interpreter: *const Interpreter) -> Result<&'a Interpreter, Error> {
         if let Some(interpreter) = unsafe { interpreter.as_ref() } {
             if let Some(stubs) = unsafe { interpreter.stubs.as_ref() } {
@@ -719,6 +745,7 @@ impl<'a> Interpreter {
         }
     }
 
+    /// Informs the TCL interpreter that the given package and version is available.
     pub fn provide_package(&self, name: &str, version: &str) -> Result<TclStatus, String> {
         let name =
             CString::new(name).map_err(|_| "unexpected Nul in package version".to_string())?;
@@ -739,6 +766,7 @@ impl<'a> Interpreter {
         Ok(TclStatus::Ok)
     }
 
+    /// Registers the command given by `proc` as `name`.
     pub fn create_command(&self, name: &str, proc: CmdProc) -> Result<TclStatus, String> {
         let name = CString::new(name).map_err(|_| "unexpected Nul in command name".to_string())?;
 
@@ -788,6 +816,12 @@ impl<'a> Interpreter {
         Ok(TclStatus::Ok)
     }
 
+    /// Delets the given command.
+    ///
+    /// This function attempts to delete the command `name` in the
+    /// interpreter.  If it exists, `true` is returned, otherwise `false` is
+    /// returned.  An error is only returned when the given `name` contains
+    /// Nul characters and is therefore not a valid TCL string.
     pub fn delete_command(&self, name: &str) -> Result<bool, String> {
         let name = CString::new(name).map_err(|_| "unexpected Nul in command name".to_string())?;
 
@@ -802,6 +836,7 @@ impl<'a> Interpreter {
         Ok(ret == 0)
     }
 
+    /// Get the current result object for the interpreter.
     pub fn get_obj_result(&self) -> &Object {
         unsafe {
             (self
@@ -814,6 +849,12 @@ impl<'a> Interpreter {
         }
     }
 
+    /// Evaluate a TCL script.
+    ///
+    /// Evaluates the given string as a TCL script.  If the script return
+    /// `TclStatus::Error`, then the associated error message is passed back
+    /// as `Err`.  Otherwise the last commands return value is passed through
+    /// as is.
     pub fn eval(&self, script: &str) -> Result<TclStatus, String> {
         if script.len() > 1 << 31 {
             return Err(
@@ -839,6 +880,10 @@ impl<'a> Interpreter {
         }
     }
 
+    /// Set the interpreter's current result value.
+    ///
+    /// When inside command logic, this can be used to set the return value
+    /// visible to the invoking TCL script.
     pub fn set_result(&self, text: &str) {
         let tcl_str = self
             .alloc(text.len() + 1)
@@ -863,6 +908,7 @@ impl<'a> Interpreter {
         }
     }
 
+    /// Gets the string associated with the TCL object.
     pub fn get_string(&self, obj: &Object) -> String {
         let raw = unsafe {
             // Trusting TCL
@@ -875,6 +921,12 @@ impl<'a> Interpreter {
         raw.to_str().expect("Invalid UTF-8 from TCL").to_string()
     }
 
+    /// Allocates TCL-managed memory.
+    ///
+    /// Allocates memory that is directly managed by TCL.  This is required
+    /// for certain interfaces (e.g., bytes representation of TCL objects)
+    /// and convenient for others (e.g., creating a Nul terminated string
+    /// from a Rust `String`).
     pub fn alloc(&self, size: usize) -> Option<&mut [u8]> {
         if size >= 1 << 32 {
             return None;
@@ -902,12 +954,56 @@ impl<'a> Interpreter {
 type CmdDataProc<T> =
     fn(interp: &Interpreter, data: &T, args: Vec<&str>) -> Result<TclStatus, String>;
 
+/// A wrapper for creating stateful commands.
+///
+/// The `StatefulCommand` type enables the creation of TCL commands that are
+/// stateful.  In other words, they can be modified and carry-forward their
+/// state to future invocations (in contrast to the `create_command` method
+/// of [Interpreter] where the function must either be pure (from TCL's
+/// perspective) or use global state).
+///
+/// # Example
+/// 
+/// ```rust
+/// use std::cell::RefCell;
+///
+/// use rtea::*;
+/// 
+/// fn create_stateful_command(interp: &Interpreter) {
+///     fn cmd(
+///         interp: &Interpreter,
+///         counter: &RefCell<usize>,
+///         _args: Vec<&str>,
+///     ) -> Result<TclStatus, String> {
+///         let mut val = counter.borrow_mut();
+///         interp.set_result(&val.to_string());
+///         *val += 1;
+/// 
+///         Ok(TclStatus::Ok)
+///     }
+/// 
+///     let c = StatefulCommand::new(cmd, RefCell::<usize>::new(0));
+///     c.attach_command(interp, "counter").unwrap();
+///     
+///     for i in 0..10 {
+///         interp.eval("counter").unwrap();
+///         assert_eq!(i.to_string(), interp.get_string(interp.get_obj_result()));
+///     }
+/// }
+/// ```
 pub struct StatefulCommand<T> {
     proc: CmdDataProc<T>,
     data: T,
 }
 
 impl<T> StatefulCommand<T> {
+    /// Creates a new `StatefulCommand`.
+    ///
+    /// The creates a new `StatefulComand` with ownership of `data`.  The
+    /// underlying implementation should be as thread-safe as the original
+    /// implementation of `data`, but care needs to be taken to ensure that
+    /// any concurrency from TCL is safe on `data` (there are no concerns for
+    /// `proc`).
     pub fn new(proc: CmdDataProc<T>, data: T) -> StatefulCommand<T> {
         StatefulCommand::<T> {
             proc: proc,
@@ -915,10 +1011,19 @@ impl<T> StatefulCommand<T> {
         }
     }
 
+    /// Attaches the `StatefulCommand` to a TCL interpreter.
+    ///
+    /// This exposes the instantiated `StatefulCommand` to the given
+    /// interpreter.  This should allow exposing a command to multiple
+    /// interpreters (or as aliases in the same interpreter) for advanced
+    /// functionality. While the borrow checker should prevent some misuses
+    /// (type is passed by ownership), this has not been heavily tested for
+    /// every type `T`.
     pub fn attach_command(self, interp: &Interpreter, name: &str) -> Result<TclStatus, String> {
         let state = Box::new(self);
         let name = CString::new(name).map_err(|_| "unexpected Nul in command name".to_string())?;
 
+        // Simple wrapper of the Rust function and data to work with TCL's API.
         fn wrapper_proc<T>(
             state: *const StatefulCommand<T>,
             i: *const Interpreter,
@@ -944,6 +1049,8 @@ impl<T> StatefulCommand<T> {
             })
         }
 
+        // Simple function to restore the `StatefulCommand` to Rust's
+        // understanding to allow Rust's RAII code to kick in.
         fn free_state<T>(state: *mut StatefulCommand<T>) {
             // This relies on TCL to properly track the command state and
             // invoke this at the appropriate moment.  Retaking ownership

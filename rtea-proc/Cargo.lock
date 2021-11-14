@@ -3,12 +3,5 @@
 version = 3
 
 [[package]]
-name = "rtea"
-version = "0.1.1"
-dependencies = [
- "rtea-proc",
-]
-
-[[package]]
 name = "rtea-proc"
 version = "1.0.1"
