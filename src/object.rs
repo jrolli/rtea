@@ -1,6 +1,6 @@
 use crate::Interpreter;
 
-/// A wrapper for [TCL objects](https://www.tcl.tk/man/tcl/TclLib/Object.html).
+/// A wrapper for [Tcl objects](https://www.tcl.tk/man/tcl/TclLib/Object.html).
 ///
 /// WIP
 #[repr(C)]
@@ -13,7 +13,7 @@ pub struct Object {
     _internal: [u8; 8],
 }
 
-/// A wrapper for [TCL object types](https://www.tcl.tk/man/tcl/TclLib/ObjectType.html).
+/// A wrapper for [Tcl object types](https://www.tcl.tk/man/tcl/TclLib/ObjectType.html).
 ///
 /// WIP
 #[repr(C)]

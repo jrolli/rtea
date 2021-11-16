@@ -1,8 +1,8 @@
 //! rtea tries to be the Rust [TEA](https://www.tcl.tk/doc/tea/TEAOverview.html)
-//! ([TCL](https://www.tcl.tk) Extension Architecture).
+//! ([Tcl](https://www.tcl.tk) Extension Architecture).
 //!
-//! The library provides the necessary wrappers around the TCL stubs
-//! implentation to write a "rusty" extension to TCL without having to use
+//! The library provides the necessary wrappers around the Tcl stubs
+//! implentation to write a "rusty" extension to Tcl without having to use
 //! unsafe code.  
 //!
 //! # Example
@@ -44,15 +44,15 @@
 //! puts [example]
 //! ```
 //!
-//! The TCL code above uses `load` just to show that the module can properly
-//! interact with TCL.  Production uses should wrap the shared object as a
-//! TCL package and load it using `package require example`.
+//! The Tcl code above uses `load` just to show that the module can properly
+//! interact with Tcl.  Production uses should wrap the shared object as a
+//! Tcl package and load it using `package require example`.
 //! The `module_init` macro already handles registering the "example"
 //! package.
 //!
 //! # Note
 //!
-//! This code assumes that it extends TCL and treats any violations of TCL's
+//! This code assumes that it extends Tcl and treats any violations of Tcl's
 //! API (unexpected null-pointers, non-UTF8 strings, etc.) as irrecovable
 //! errors that should panic.
 

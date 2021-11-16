@@ -11,3 +11,4 @@ edition = "2018"
 
 [lib]
 proc_macro = true
+doctest = false

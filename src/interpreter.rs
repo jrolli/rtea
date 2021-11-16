@@ -5,9 +5,9 @@ use std::os::raw::c_char;
 
 use crate::Object;
 
-/// A wrapper around a [TCL](https://www.tcl.tk) interpreter object.
+/// A wrapper around a [Tcl](https://www.tcl.tk) interpreter object.
 ///
-/// This is a wrapper around the TCL interpreter object that leverages the
+/// This is a wrapper around the Tcl interpreter object that leverages the
 /// Stubs interface.  It makes assumptions about the interface (such as
 /// stability of function pointers) that are made by the underlying stubs
 /// implementation.  However, as a deliberate nod to the importance of the
@@ -26,11 +26,11 @@ pub struct Interpreter {
 
 type CmdProc = fn(interp: &Interpreter, args: Vec<&str>) -> Result<TclStatus, String>;
 
-const TCL_STUB_MAGIC: u32 = 0xFCA3BACF; // TCL 8.x extension
+const TCL_STUB_MAGIC: u32 = 0xFCA3BACF; // Tcl 8.x extension
 
-/// A wrapper for TCL return status codes.
+/// A wrapper for Tcl return status codes.
 ///
-/// This is a simple wrapper around the expected return codes for TCL
+/// This is a simple wrapper around the expected return codes for Tcl
 /// commands.  `Ok` and `Error` are the most common ones, but the others have
 /// specific meanings under certain conditions (e.g., binding handlers in
 /// Tk).  See the appropriate documentation for specific behavior.
@@ -42,6 +42,18 @@ pub enum TclStatus {
     Return = 2,
     Break = 3,
     Continue = 4,
+}
+
+
+/// A wrapper for values passed to Tcl's [unload](https://www.tcl.tk/man/tcl/TclCmd/unload.html) function.
+#[repr(isize)]
+pub enum TclUnloadFlag {
+    /// Inidicates the interpreter is exiting but that the module's code is
+    /// not being unmapped.
+    DetachFromInterpreter = 1 << 0,
+    /// Inidicates the last interpreter is detaching and the module is about
+    /// to be unmapped from the process.
+    DetachFromProcesss = 1 << 1,
 }
 
 const _TCL_STATIC: *const c_void = 0 as *const c_void;
@@ -711,7 +723,7 @@ struct Stubs {
     _untranslated_function649: *const c_void, // 649
 }
 
-/// Error codes for unwrapping a TCL interpreter.
+/// Error codes for unwrapping a Tcl interpreter.
 ///
 /// These exist primarily for debugging and advanced use-cases.  Unless you
 /// are calling [from_raw](Interpreter::from_raw), you should not need to worry about these.
@@ -724,7 +736,7 @@ pub enum Error {
 }
 
 impl<'a> Interpreter {
-    /// Converts a raw pointer to a TCL interpreter into a Rust reference.
+    /// Converts a raw pointer to a Tcl interpreter into a Rust reference.
     ///
     /// Most users should not need to use this function because a reference is
     /// already passed to the appropriate functions.  This is public because
@@ -745,7 +757,7 @@ impl<'a> Interpreter {
         }
     }
 
-    /// Informs the TCL interpreter that the given package and version is available.
+    /// Informs the Tcl interpreter that the given package and version is available.
     pub fn provide_package(&self, name: &str, version: &str) -> Result<TclStatus, String> {
         let name =
             CString::new(name).map_err(|_| "unexpected Nul in package version".to_string())?;
@@ -782,14 +794,14 @@ impl<'a> Interpreter {
             argc: usize,
             argv: *const *const i8,
         ) -> TclStatus {
-            let interp = Interpreter::from_raw(i).expect("TCL passed bad interpreter");
+            let interp = Interpreter::from_raw(i).expect("Tcl passed bad interpreter");
             let raw_args = unsafe { std::slice::from_raw_parts(argv, argc) };
             let mut args = Vec::with_capacity(raw_args.len());
             for arg in raw_args {
                 args.push(
                     unsafe { std::ffi::CStr::from_ptr(*arg) }
                         .to_str()
-                        .expect("invalid args from TCL"),
+                        .expect("invalid args from Tcl"),
                 );
             }
 
@@ -821,7 +833,7 @@ impl<'a> Interpreter {
     /// This function attempts to delete the command `name` in the
     /// interpreter.  If it exists, `true` is returned, otherwise `false` is
     /// returned.  An error is only returned when the given `name` contains
-    /// Nul characters and is therefore not a valid TCL string.
+    /// Nul characters and is therefore not a valid Tcl string.
     pub fn delete_command(&self, name: &str) -> Result<bool, String> {
         let name = CString::new(name).map_err(|_| "unexpected Nul in command name".to_string())?;
 
@@ -845,20 +857,20 @@ impl<'a> Interpreter {
                 .expect("stubs missing after initial check")
                 .get_obj_result)(self as *const Interpreter)
             .as_ref()
-            .expect("TCL should guarantee this is not Null")
+            .expect("Tcl should guarantee this is not Null")
         }
     }
 
-    /// Evaluate a TCL script.
+    /// Evaluate a Tcl script.
     ///
-    /// Evaluates the given string as a TCL script.  If the script return
+    /// Evaluates the given string as a Tcl script.  If the script return
     /// `TclStatus::Error`, then the associated error message is passed back
     /// as `Err`.  Otherwise the last commands return value is passed through
     /// as is.
     pub fn eval(&self, script: &str) -> Result<TclStatus, String> {
         if script.len() > 1 << 31 {
             return Err(
-                "TCL versions prior to 9.0 do not support scripts greater than 2 GiB".to_string(),
+                "Tcl versions prior to 9.0 do not support scripts greater than 2 GiB".to_string(),
             );
         }
         let res = unsafe {
@@ -883,11 +895,11 @@ impl<'a> Interpreter {
     /// Set the interpreter's current result value.
     ///
     /// When inside command logic, this can be used to set the return value
-    /// visible to the invoking TCL script.
+    /// visible to the invoking Tcl script.
     pub fn set_result(&self, text: &str) {
         let tcl_str = self
             .alloc(text.len() + 1)
-            .expect("propagating memory failure in TCL");
+            .expect("propagating memory failure in Tcl");
 
         tcl_str[..text.len()].copy_from_slice(text.as_bytes());
 
@@ -908,23 +920,23 @@ impl<'a> Interpreter {
         }
     }
 
-    /// Gets the string associated with the TCL object.
+    /// Gets the string associated with the Tcl object.
     pub fn get_string(&self, obj: &Object) -> String {
         let raw = unsafe {
-            // Trusting TCL
+            // Trusting Tcl
             CStr::from_ptr((self
                 .stubs
                 .as_ref()
                 .expect("stubs missing after initial check")
                 .get_string)(obj))
         };
-        raw.to_str().expect("Invalid UTF-8 from TCL").to_string()
+        raw.to_str().expect("Invalid UTF-8 from Tcl").to_string()
     }
 
-    /// Allocates TCL-managed memory.
+    /// Allocates Tcl-managed memory.
     ///
-    /// Allocates memory that is directly managed by TCL.  This is required
-    /// for certain interfaces (e.g., bytes representation of TCL objects)
+    /// Allocates memory that is directly managed by Tcl.  This is required
+    /// for certain interfaces (e.g., bytes representation of Tcl objects)
     /// and convenient for others (e.g., creating a Nul terminated string
     /// from a Rust `String`).
     pub fn alloc(&self, size: usize) -> Option<&mut [u8]> {
@@ -932,7 +944,7 @@ impl<'a> Interpreter {
             return None;
         }
         let ptr = unsafe {
-            // Trusting TCL to handle this correctly (check above can be removed for TCL 9.0)
+            // Trusting Tcl to handle this correctly (check above can be removed for Tcl 9.0)
             (self
                 .stubs
                 .as_ref()
@@ -944,7 +956,7 @@ impl<'a> Interpreter {
             None
         } else {
             unsafe {
-                // We've checked that it is not null and therefore trust TCL
+                // We've checked that it is not null and therefore trust Tcl
                 Some(std::slice::from_raw_parts_mut(ptr, size))
             }
         }
@@ -956,10 +968,10 @@ type CmdDataProc<T> =
 
 /// A wrapper for creating stateful commands.
 ///
-/// The `StatefulCommand` type enables the creation of TCL commands that are
+/// The `StatefulCommand` type enables the creation of Tcl commands that are
 /// stateful.  In other words, they can be modified and carry-forward their
 /// state to future invocations (in contrast to the `create_command` method
-/// of [Interpreter] where the function must either be pure (from TCL's
+/// of [Interpreter] where the function must either be pure (from Tcl's
 /// perspective) or use global state).
 ///
 /// # Example
@@ -1002,7 +1014,7 @@ impl<T> StatefulCommand<T> {
     /// The creates a new `StatefulComand` with ownership of `data`.  The
     /// underlying implementation should be as thread-safe as the original
     /// implementation of `data`, but care needs to be taken to ensure that
-    /// any concurrency from TCL is safe on `data` (there are no concerns for
+    /// any concurrency from Tcl is safe on `data` (there are no concerns for
     /// `proc`).
     pub fn new(proc: CmdDataProc<T>, data: T) -> StatefulCommand<T> {
         StatefulCommand::<T> {
@@ -1011,7 +1023,7 @@ impl<T> StatefulCommand<T> {
         }
     }
 
-    /// Attaches the `StatefulCommand` to a TCL interpreter.
+    /// Attaches the `StatefulCommand` to a Tcl interpreter.
     ///
     /// This exposes the instantiated `StatefulCommand` to the given
     /// interpreter.  This should allow exposing a command to multiple
@@ -1023,21 +1035,21 @@ impl<T> StatefulCommand<T> {
         let state = Box::new(self);
         let name = CString::new(name).map_err(|_| "unexpected Nul in command name".to_string())?;
 
-        // Simple wrapper of the Rust function and data to work with TCL's API.
+        // Simple wrapper of the Rust function and data to work with Tcl's API.
         fn wrapper_proc<T>(
             state: *const StatefulCommand<T>,
             i: *const Interpreter,
             argc: usize,
             argv: *const *const i8,
         ) -> TclStatus {
-            let interp = Interpreter::from_raw(i).expect("TCL passed bad interpreter");
+            let interp = Interpreter::from_raw(i).expect("Tcl passed bad interpreter");
             let raw_args = unsafe { std::slice::from_raw_parts(argv, argc) };
             let mut args = Vec::with_capacity(raw_args.len());
             for arg in raw_args {
                 args.push(
                     unsafe { std::ffi::CStr::from_ptr(*arg) }
                         .to_str()
-                        .expect("invalid args from TCL"),
+                        .expect("invalid args from Tcl"),
                 );
             }
 
@@ -1052,7 +1064,7 @@ impl<T> StatefulCommand<T> {
         // Simple function to restore the `StatefulCommand` to Rust's
         // understanding to allow Rust's RAII code to kick in.
         fn free_state<T>(state: *mut StatefulCommand<T>) {
-            // This relies on TCL to properly track the command state and
+            // This relies on Tcl to properly track the command state and
             // invoke this at the appropriate moment.  Retaking ownership
             // of the underlying pointer ensures the destructor gets called
             unsafe { Box::<StatefulCommand<T>>::from_raw(state) };

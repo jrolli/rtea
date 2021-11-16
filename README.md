@@ -1,3 +1,3 @@
-# Rust TCL Extension Architecture (rtea)
+# Rust Tcl Extension Architecture (rtea)
 
-Makes writing TCL extensions in Rust ergonomic.
+Makes writing Tcl extensions in Rust ergonomic.
