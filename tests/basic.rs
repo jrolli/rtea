@@ -6,19 +6,46 @@ mod common;
 
 use common::TestInterpreter;
 
+#[module_init(RteaTest, "0.0.0")]
+fn test_init(interp: &Interpreter) -> Result<TclStatus, String> {
+    fn cmd(interp: &Interpreter, _args: Vec<&str>) -> Result<TclStatus, String> {
+        interp.set_result("pass");
+        Ok(TclStatus::Ok)
+    }
+
+    interp.create_command("mycmd", cmd)
+}
+
+#[test]
+fn init_wrapper() -> Result<(), String> {
+    let test_interp = TestInterpreter::new();
+    assert_eq!(RteaTest_Init(test_interp.as_ptr()), TclStatus::Ok);
+
+    let interp = test_interp.as_ref();
+    let result = interp
+        .eval("mycmd")
+        .map_err(|obj| obj.get_string().to_string())?;
+    assert_eq!(result.get_string(), "pass");
+
+    Ok(())
+}
+
 #[test]
 fn eval() -> Result<(), String> {
     let test_interp = TestInterpreter::new();
+    assert_eq!(RteaTest_Init(test_interp.as_ptr()), TclStatus::Ok);
     let interp = test_interp.as_ref();
-    assert_eq!(interp.eval("expr 5 + 5")?, TclStatus::Ok);
-    let result = interp.get_obj_result();
-    assert_eq!(interp.get_string(result), "10");
+    let result = interp
+        .eval("expr 5 + 5")
+        .map_err(|obj| obj.get_string().to_string())?;
+    assert_eq!(result.get_string(), "10");
     Ok(())
 }
 
 #[test]
 fn create_command() -> Result<(), String> {
     let test_interp = TestInterpreter::new();
+    assert_eq!(RteaTest_Init(test_interp.as_ptr()), TclStatus::Ok);
     let interp = test_interp.as_ref();
 
     fn cmd(interp: &Interpreter, args: Vec<&str>) -> Result<TclStatus, String> {
@@ -31,15 +58,15 @@ fn create_command() -> Result<(), String> {
     }
 
     interp.create_command("mycmd", cmd)?;
-    interp.eval("mycmd not_fail")?;
-    let result = interp.get_obj_result();
-    assert_eq!(interp.get_string(result), "pass");
+    let result = interp
+        .eval("mycmd not_fail")
+        .map_err(|obj| obj.get_string().to_string())?;
+    assert_eq!(result.get_string(), "pass");
 
-    let eval = interp
+    let result = interp
         .eval("mycmd fail")
         .expect_err("cmd should error on 'fail' as argv[1]");
-    let result = interp.get_string(interp.get_obj_result());
-    assert_eq!(eval, result);
+    assert_eq!("doing as told", result.get_string());
 
     Ok(())
 }
@@ -47,6 +74,7 @@ fn create_command() -> Result<(), String> {
 #[test]
 fn create_stateful_command() -> Result<(), String> {
     let test_interp = TestInterpreter::new();
+    assert_eq!(RteaTest_Init(test_interp.as_ptr()), TclStatus::Ok);
     let interp = test_interp.as_ref();
 
     fn cmd(
@@ -63,32 +91,11 @@ fn create_stateful_command() -> Result<(), String> {
 
     StatefulCommand::new(cmd, RefCell::<usize>::new(0)).attach_command(interp, "counter")?;
     for i in 0..10 {
-        interp.eval("counter")?;
-        assert_eq!(i.to_string(), interp.get_string(interp.get_obj_result()));
+        interp
+            .eval("counter")
+            .map_err(|obj| obj.get_string().to_string())?;
+        assert_eq!(i.to_string(), interp.get_obj_result().get_string());
     }
-
-    Ok(())
-}
-
-#[module_init(Bogus, "0.0.0")]
-fn test_init(interp: &Interpreter) -> Result<TclStatus, String> {
-    fn cmd(interp: &Interpreter, _args: Vec<&str>) -> Result<TclStatus, String> {
-        interp.set_result("pass");
-        Ok(TclStatus::Ok)
-    }
-
-    interp.create_command("mycmd", cmd)
-}
-
-#[test]
-fn init_wrapper() -> Result<(), String> {
-    let test_interp = TestInterpreter::new();
-    assert_eq!(Bogus_Init(test_interp.as_ptr()), TclStatus::Ok);
-
-    let interp = test_interp.as_ref();
-    interp.eval("mycmd")?;
-    let result = interp.get_obj_result();
-    assert_eq!(interp.get_string(result), "pass");
 
     Ok(())
 }

@@ -25,14 +25,14 @@
 //! **src/lib.rs**
 //! ```rust
 //! use rtea::*;
-//! 
+//!
 //! #[module_init(Example, "1.0.0")]
 //! fn init(interp: &Interpreter) -> Result<TclStatus, String> {
 //!     interp.create_command("example", example)
 //! }
-//! 
+//!
 //! fn example(interp: &Interpreter, args: Vec<&str>) -> Result<TclStatus, String> {
-//!     interp.eval("puts {Hello, world!}")?;
+//!     interp.eval("puts {Hello, world!}").map_err(|e| e.get_string().to_string())?;
 //!     interp.set_result("Hello from Rust!");
 //!     Ok(TclStatus::Ok)
 //! }
@@ -58,6 +58,7 @@
 
 mod interpreter;
 mod object;
+mod tcl;
 
 pub use interpreter::*;
 pub use object::*;

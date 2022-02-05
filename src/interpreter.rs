@@ -1,9 +1,11 @@
 use std::ffi::c_void;
-use std::ffi::CStr;
 use std::ffi::CString;
 use std::os::raw::c_char;
 
+use crate::tcl::*;
 use crate::Object;
+use crate::ObjectType;
+use crate::RawObject;
 
 /// A wrapper around a [Tcl](https://www.tcl.tk) interpreter object.
 ///
@@ -17,6 +19,7 @@ use crate::Object;
 /// (extra indirection), it fits more with Rust paradigms and should reduce
 /// the risk of trying to use the API without an associated interpeter.
 #[repr(C)]
+#[derive(Debug)]
 pub struct Interpreter {
     _legacy_result: *const c_void,
     _legace_free_proc: *const c_void,
@@ -44,7 +47,6 @@ pub enum TclStatus {
     Continue = 4,
 }
 
-
 /// A wrapper for values passed to Tcl's [unload](https://www.tcl.tk/man/tcl/TclCmd/unload.html) function.
 #[repr(isize)]
 pub enum TclUnloadFlag {
@@ -69,7 +71,7 @@ struct Stubs {
     _untranslated_function1: *const c_void,  // 1
     _untranslated_function2: *const c_void,  // 2
     _untranslated_function3: *const c_void,  // 3
-    _untranslated_function4: *const c_void,  // 4
+    free: extern "C" fn(*mut u8),            // 4
     _untranslated_function5: *const c_void,  // 5
     _untranslated_function6: *const c_void,  // 6
     _untranslated_function7: *const c_void,  // 7
@@ -83,7 +85,8 @@ struct Stubs {
     _untranslated_function15: *const c_void, // 15
     _untranslated_function16: *const c_void, // 16
     _untranslated_function17: *const c_void, // 17
-    _untranslated_function18: *const c_void, // 18
+    convert_to_type:
+        extern "C" fn(*const Interpreter, *mut RawObject, *const ObjectType) -> TclStatus, // 18
     _untranslated_function19: *const c_void, // 19
     _untranslated_function20: *const c_void, // 20
     _untranslated_function21: *const c_void, // 21
@@ -94,8 +97,8 @@ struct Stubs {
     _untranslated_function26: *const c_void, // 26
     _untranslated_function27: *const c_void, // 27
     _untranslated_function28: *const c_void, // 28
-    _untranslated_function29: *const c_void, // 29
-    _untranslated_function30: *const c_void, // 30
+    duplicate_obj: extern "C" fn(*const RawObject) -> *mut RawObject, // 29
+    free_obj: extern "C" fn(*mut RawObject), // 30
     _untranslated_function31: *const c_void, // 31
     _untranslated_function32: *const c_void, // 32
     _untranslated_function33: *const c_void, // 33
@@ -105,9 +108,9 @@ struct Stubs {
     _untranslated_function37: *const c_void, // 37
     _untranslated_function38: *const c_void, // 38
     _untranslated_function39: *const c_void, // 39
-    _untranslated_function40: *const c_void, // 40
+    get_obj_type: extern "C" fn(*const u8) -> *const ObjectType, // 40
     _untranslated_function41: *const c_void, // 41
-    _untranslated_function42: *const c_void, // 42
+    invalidate_string_rep: extern "C" fn(*mut RawObject), // 42
     _untranslated_function43: *const c_void, // 43
     _untranslated_function44: *const c_void, // 44
     _untranslated_function45: *const c_void, // 45
@@ -120,7 +123,7 @@ struct Stubs {
     _untranslated_function52: *const c_void, // 52
     _untranslated_function53: *const c_void, // 53
     _untranslated_function54: *const c_void, // 54
-    _untranslated_function55: *const c_void, // 55
+    new_obj: extern "C" fn() -> *mut RawObject, // 55
     _untranslated_function56: *const c_void, // 56
     _untranslated_function57: *const c_void, // 57
     _untranslated_function58: *const c_void, // 58
@@ -237,7 +240,7 @@ struct Stubs {
     _untranslated_function163: *const c_void, // 163
     _untranslated_function164: *const c_void, // 164
     _untranslated_function165: *const c_void, // 165
-    get_obj_result: extern "C" fn(*const Interpreter) -> *const Object, // 166
+    get_obj_result: extern "C" fn(*const Interpreter) -> *mut RawObject, // 166
     _untranslated_function167: *const c_void, // 167
     _untranslated_function168: *const c_void, // 168
     _untranslated_function169: *const c_void, // 169
@@ -282,7 +285,7 @@ struct Stubs {
     _untranslated_function208: *const c_void, // 208
     _untranslated_function209: *const c_void, // 209
     _untranslated_function210: *const c_void, // 210
-    _untranslated_function211: *const c_void, // 211
+    register_obj_type: extern "C" fn(*const ObjectType), // 211
     _untranslated_function212: *const c_void, // 212
     _untranslated_function213: *const c_void, // 213
     _untranslated_function214: *const c_void, // 214
@@ -411,7 +414,7 @@ struct Stubs {
     _untranslated_function337: *const c_void, // 337
     _untranslated_function338: *const c_void, // 338
     _untranslated_function339: *const c_void, // 339
-    get_string: extern "C" fn(*const Object) -> *const c_char, // 340
+    get_string: extern "C" fn(*const RawObject) -> *const c_char, // 340
     _untranslated_function341: *const c_void, // 341
     _untranslated_function342: *const c_void, // 342
     _untranslated_function343: *const c_void, // 343
@@ -501,7 +504,7 @@ struct Stubs {
     _untranslated_function427: *const c_void, // 427
     attempt_alloc: extern "C" fn(usize) -> *mut u8, // 428
     _untranslated_function429: *const c_void, // 429
-    _untranslated_function430: *const c_void, // 430
+    attempt_realloc: extern "C" fn(*mut u8, usize) -> *mut u8, // 430
     _untranslated_function431: *const c_void, // 431
     _untranslated_function432: *const c_void, // 432
     _untranslated_function433: *const c_void, // 433
@@ -712,9 +715,9 @@ struct Stubs {
     _untranslated_function638: *const c_void, // 638
     _untranslated_function639: *const c_void, // 639
     _untranslated_function640: *const c_void, // 640
-    _untranslated_function641: *const c_void, // 641
-    _untranslated_function642: *const c_void, // 642
-    _untranslated_function643: *const c_void, // 643
+    incr_ref_count: Option<extern "C" fn(*mut RawObject)>, // 641
+    decr_ref_count: Option<extern "C" fn(*mut RawObject)>, // 642
+    is_shared: Option<extern "C" fn(*const RawObject) -> isize>, // 643
     _untranslated_function644: *const c_void, // 644
     _untranslated_function645: *const c_void, // 645
     _untranslated_function646: *const c_void, // 646
@@ -754,6 +757,43 @@ impl<'a> Interpreter {
             }
         } else {
             Err(Error::NullInterpreter)
+        }
+    }
+
+    /// DO NOT USE THIS FUNCTION.
+    ///
+    /// This function is only public so that it can be called by the
+    /// [module_init](rtea_proc::module_init) macro for derivative RTEA
+    /// projects..
+    pub fn init_global_functions(&self) {
+        unsafe {
+            let stubs = self
+                .stubs
+                .as_ref()
+                .expect("stubs missing after initial check");
+
+            ALLOC = Some(stubs.attempt_alloc);
+            REALLOC = Some(stubs.attempt_realloc);
+            FREE = Some(stubs.free);
+
+            NEW_OBJ = Some(stubs.new_obj);
+            FREE_OBJ = Some(stubs.free_obj);
+            DUPLICATE_OBJ = Some(stubs.duplicate_obj);
+            if let Some(f) = stubs.incr_ref_count {
+                INCR_REF_COUNT = f;
+            }
+            if let Some(f) = stubs.decr_ref_count {
+                DECR_REF_COUNT = f;
+            }
+            if let Some(f) = stubs.is_shared {
+                IS_SHARED = f;
+            }
+            INVALIDATE_STRING_REP = Some(stubs.invalidate_string_rep);
+            GET_STRING = Some(stubs.get_string);
+
+            REGISTER_OBJ_TYPE = Some(stubs.register_obj_type);
+            GET_OBJ_TYPE = Some(stubs.get_obj_type);
+            CONVERT_TO_TYPE = Some(stubs.convert_to_type);
         }
     }
 
@@ -849,15 +889,13 @@ impl<'a> Interpreter {
     }
 
     /// Get the current result object for the interpreter.
-    pub fn get_obj_result(&self) -> &Object {
+    pub fn get_obj_result(&self) -> Object {
         unsafe {
-            (self
+            RawObject::wrap((self
                 .stubs
                 .as_ref()
                 .expect("stubs missing after initial check")
-                .get_obj_result)(self as *const Interpreter)
-            .as_ref()
-            .expect("Tcl should guarantee this is not Null")
+                .get_obj_result)(self as *const Interpreter))
         }
     }
 
@@ -867,13 +905,13 @@ impl<'a> Interpreter {
     /// `TclStatus::Error`, then the associated error message is passed back
     /// as `Err`.  Otherwise the last commands return value is passed through
     /// as is.
-    pub fn eval(&self, script: &str) -> Result<TclStatus, String> {
+    pub fn eval(&self, script: &str) -> Result<Object, Object> {
         if script.len() > 1 << 31 {
             return Err(
-                "Tcl versions prior to 9.0 do not support scripts greater than 2 GiB".to_string(),
+                Object::new(), // "Tcl versions prior to 9.0 do not support scripts greater than 2 GiB".to_string(),
             );
         }
-        let res = unsafe {
+        let status = unsafe {
             (self
                 .stubs
                 .as_ref()
@@ -885,10 +923,11 @@ impl<'a> Interpreter {
                 0,
             )
         };
-        if res == TclStatus::Error {
-            Err(self.get_string(self.get_obj_result()))
+        let result = self.get_obj_result();
+        if status == TclStatus::Error {
+            Err(result)
         } else {
-            Ok(res)
+            Ok(result)
         }
     }
 
@@ -918,19 +957,6 @@ impl<'a> Interpreter {
                 TCL_DYNAMIC,
             )
         }
-    }
-
-    /// Gets the string associated with the Tcl object.
-    pub fn get_string(&self, obj: &Object) -> String {
-        let raw = unsafe {
-            // Trusting Tcl
-            CStr::from_ptr((self
-                .stubs
-                .as_ref()
-                .expect("stubs missing after initial check")
-                .get_string)(obj))
-        };
-        raw.to_str().expect("Invalid UTF-8 from Tcl").to_string()
     }
 
     /// Allocates Tcl-managed memory.
@@ -975,12 +1001,12 @@ type CmdDataProc<T> =
 /// perspective) or use global state).
 ///
 /// # Example
-/// 
+///
 /// ```rust
 /// use std::cell::RefCell;
 ///
 /// use rtea::*;
-/// 
+///
 /// fn create_stateful_command(interp: &Interpreter) {
 ///     fn cmd(
 ///         interp: &Interpreter,
@@ -990,16 +1016,16 @@ type CmdDataProc<T> =
 ///         let mut val = counter.borrow_mut();
 ///         interp.set_result(&val.to_string());
 ///         *val += 1;
-/// 
+///
 ///         Ok(TclStatus::Ok)
 ///     }
-/// 
+///
 ///     let c = StatefulCommand::new(cmd, RefCell::<usize>::new(0));
 ///     c.attach_command(interp, "counter").unwrap();
 ///     
 ///     for i in 0..10 {
 ///         interp.eval("counter").unwrap();
-///         assert_eq!(i.to_string(), interp.get_string(interp.get_obj_result()));
+///         assert_eq!(i.to_string(), interp.get_obj_result().get_string());
 ///     }
 /// }
 /// ```

@@ -9,27 +9,27 @@
 //!
 //! ```rust
 //! use rtea::{Interpreter, TclStatus, TclUnloadFlag}; // Implicit dependency of macro when invoked.
-//! 
+//!
 //! #[module_init(Example, "1.0.0")]
 //! fn init(interp: &Interpreter) -> Result<TclStatus, String> {
 //!     safe_init(interp, args)?;
 //!     // Add additional commands that may not be safe for untrusted code...
 //!     Ok(TclStatus::Ok)
 //! }
-//! 
+//!
 //! #[module_safe_init(Example, "1.0.0")]
 //! fn safe_init(_interp: &Interpreter) -> Result<TclStatus, String> {
 //!     // Add commands that are safe even for untrusted code...
 //!     Ok(TclStatus::Ok)
 //! }
-//! 
+//!
 //! #[module_unload(Example)]
 //! fn unload(interp: &Interpreter) -> Result<TclStatus, String> {
 //!     safe_unload(interp, args)?;
 //!     // Remove the additional commands that were not considered "safe"...
 //!     Ok(TclStatus::Ok)
 //! }
-//! 
+//!
 //! #[module_safe_unload(Example)]
 //! fn safe_unload(_interp: &Interpreter) -> Result<TclStatus, String> {
 //!     // Remove the "safe" set of commands
@@ -86,9 +86,12 @@ fn module_init_common(prefix: &str, attr: TokenStream, item: TokenStream) -> Tok
                 #[no_mangle]
                 pub extern "C" fn {module_symbol}_{prefix}Init(interp: *const Interpreter) -> TclStatus {{
                     Interpreter::from_raw(interp)
-                        .map(|interp| {init_fn}(interp)
-                            .and(interp.provide_package("{module_tcl}", {version}))
-                            .unwrap_or_else(|s| {{interp.set_result(&s); TclStatus::Error}}))
+                        .map(|interp| {{
+                            interp.init_global_functions();
+                            {init_fn}(interp)
+                                .and(interp.provide_package("{module_tcl}", {version}))
+                                .unwrap_or_else(|s| {{interp.set_result(&s); TclStatus::Error}})
+                        }})
                         .unwrap_or(TclStatus::Error)
                 }}
             "#,
@@ -169,7 +172,7 @@ pub fn module_init(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// crate named "example").
 ///
 /// # Warning
-/// 
+///
 /// This initialization routine is intended to be safe to use
 /// from **untrusted** code.  Users must take care that the functionality
 /// they expose to Tcl scripts from here is truly "safe" (in the destroy a
