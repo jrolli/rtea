@@ -62,4 +62,5 @@ mod tcl;
 
 pub use interpreter::*;
 pub use object::*;
-pub use rtea_proc::module_init;
+pub use rtea_proc::*;
+pub use tcl::*;

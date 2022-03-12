@@ -6,6 +6,7 @@ use crate::tcl::*;
 use crate::Object;
 use crate::ObjectType;
 use crate::RawObject;
+use crate::TclObjectType;
 
 /// A wrapper around a [Tcl](https://www.tcl.tk) interpreter object.
 ///
@@ -28,6 +29,7 @@ pub struct Interpreter {
 }
 
 type CmdProc = fn(interp: &Interpreter, args: Vec<&str>) -> Result<TclStatus, String>;
+type ObjCmdProc = fn(interp: &Interpreter, args: Vec<Object>) -> Result<TclStatus, Object>;
 
 const TCL_STUB_MAGIC: u32 = 0xFCA3BACF; // Tcl 8.x extension
 
@@ -124,7 +126,7 @@ struct Stubs {
     _untranslated_function53: *const c_void, // 53
     _untranslated_function54: *const c_void, // 54
     new_obj: extern "C" fn() -> *mut RawObject, // 55
-    _untranslated_function56: *const c_void, // 56
+    new_string_obj: extern "C" fn(*const c_char, i32) -> *mut RawObject, // 56
     _untranslated_function57: *const c_void, // 57
     _untranslated_function58: *const c_void, // 58
     _untranslated_function59: *const c_void, // 59
@@ -133,7 +135,7 @@ struct Stubs {
     _untranslated_function62: *const c_void, // 62
     _untranslated_function63: *const c_void, // 63
     _untranslated_function64: *const c_void, // 64
-    _untranslated_function65: *const c_void, // 65
+    set_string_obj: extern "C" fn(*mut RawObject, *const c_char, i32), // 65
     _untranslated_function66: *const c_void, // 66
     _untranslated_function67: *const c_void, // 67
     _untranslated_function68: *const c_void, // 68
@@ -170,7 +172,13 @@ struct Stubs {
     _untranslated_function93: *const c_void, // 93
     _untranslated_function94: *const c_void, // 94
     _untranslated_function95: *const c_void, // 95
-    _untranslated_function96: *const c_void, // 96
+    create_obj_command: extern "C" fn(
+        *const Interpreter,
+        *const c_char,
+        *const c_void,
+        *const c_void,
+        *const c_void,
+    ) -> *const c_void, // 96
     _untranslated_function97: *const c_void, // 97
     _untranslated_function98: *const c_void, // 98
     _untranslated_function99: *const c_void, // 99
@@ -309,7 +317,7 @@ struct Stubs {
     set_result: extern "C" fn(*const Interpreter, *const c_char, *const c_void), // 232
     _untranslated_function233: *const c_void, // 233
     _untranslated_function234: *const c_void, // 234
-    _untranslated_function235: *const c_void, // 235
+    set_obj_result: extern "C" fn(*const Interpreter, *mut RawObject), // 235
     _untranslated_function236: *const c_void, // 236
     _untranslated_function237: *const c_void, // 237
     _untranslated_function238: *const c_void, // 238
@@ -791,9 +799,11 @@ impl<'a> Interpreter {
             INVALIDATE_STRING_REP = Some(stubs.invalidate_string_rep);
             GET_STRING = Some(stubs.get_string);
 
-            REGISTER_OBJ_TYPE = Some(stubs.register_obj_type);
             GET_OBJ_TYPE = Some(stubs.get_obj_type);
             CONVERT_TO_TYPE = Some(stubs.convert_to_type);
+
+            NEW_STRING_OBJ = Some(stubs.new_string_obj);
+            SET_STRING_OBJ = Some(stubs.set_string_obj);
         }
     }
 
@@ -828,8 +838,8 @@ impl<'a> Interpreter {
         //     argc: usize,
         //     argv: *const *const i8,
         // ) -> TclStatus;
-        fn wrapper_proc(
-            f: CmdProc,
+        extern "C" fn wrapper_proc(
+            f_ptr: *const c_void,
             i: *const Interpreter,
             argc: usize,
             argv: *const *const i8,
@@ -844,6 +854,8 @@ impl<'a> Interpreter {
                         .expect("invalid args from Tcl"),
                 );
             }
+
+            let f: CmdProc = unsafe { std::mem::transmute(f_ptr) };
 
             f(interp, args).unwrap_or_else(|s| {
                 interp.set_result(&s);
@@ -868,7 +880,66 @@ impl<'a> Interpreter {
         Ok(TclStatus::Ok)
     }
 
-    /// Delets the given command.
+    /// Registers the command given by `proc` as `name`.
+    pub fn create_obj_command(&self, name: &str, proc: ObjCmdProc) -> Result<TclStatus, String> {
+        let name = CString::new(name).map_err(|_| "unexpected Nul in command name".to_string())?;
+
+        // type TclCmdProc = extern "C" fn(
+        //     data: *const c_void,
+        //     interp: *const Interpreter,
+        //     argc: usize,
+        //     argv: *const *mut RawObject,
+        // ) -> TclStatus;
+        extern "C" fn wrapper_proc(
+            f_ptr: *const c_void,
+            i: *const Interpreter,
+            argc: usize,
+            argv: *const *mut RawObject,
+        ) -> TclStatus {
+            let interp = Interpreter::from_raw(i).expect("Tcl passed bad interpreter");
+            let raw_args = unsafe { std::slice::from_raw_parts(argv, argc) };
+            let mut args = Vec::with_capacity(raw_args.len());
+            for arg in raw_args {
+                args.push(RawObject::wrap(*arg));
+            }
+
+            let f: ObjCmdProc = unsafe { std::mem::transmute(f_ptr) };
+
+            f(interp, args).unwrap_or_else(|obj| {
+                interp.set_obj_result(&obj);
+                TclStatus::Error
+            })
+        }
+
+        unsafe {
+            (self
+                .stubs
+                .as_ref()
+                .expect("stubs missing after initial check")
+                .create_obj_command)(
+                self as *const Interpreter,
+                name.as_ptr(),
+                wrapper_proc as *const c_void,
+                proc as *const c_void,
+                std::ptr::null() as *const c_void,
+            )
+        };
+
+        Ok(TclStatus::Ok)
+    }
+
+    /// Registers the object with TCL
+    pub fn register_obj_type<T: TclObjectType>(&self) {
+        unsafe {
+            (self
+                .stubs
+                .as_ref()
+                .expect("stubs missing after initial check")
+                .register_obj_type)(T::tcl_type() as *const ObjectType)
+        }
+    }
+
+    /// Deletes the given command.
     ///
     /// This function attempts to delete the command `name` in the
     /// interpreter.  If it exists, `true` is returned, otherwise `false` is
@@ -955,6 +1026,18 @@ impl<'a> Interpreter {
                 self as *const Interpreter,
                 tcl_str.as_ptr() as *const c_char,
                 TCL_DYNAMIC,
+            )
+        }
+    }
+
+    pub fn set_obj_result(&self, result: &Object) {
+        unsafe {
+            (self
+                .stubs
+                .as_ref()
+                .expect("stubs missing after initial check")
+                .set_obj_result)(
+                self as *const Interpreter, result.obj as *mut RawObject
             )
         }
     }
@@ -1062,7 +1145,7 @@ impl<T> StatefulCommand<T> {
         let name = CString::new(name).map_err(|_| "unexpected Nul in command name".to_string())?;
 
         // Simple wrapper of the Rust function and data to work with Tcl's API.
-        fn wrapper_proc<T>(
+        extern "C" fn wrapper_proc<T>(
             state: *const StatefulCommand<T>,
             i: *const Interpreter,
             argc: usize,
@@ -1093,7 +1176,7 @@ impl<T> StatefulCommand<T> {
             // This relies on Tcl to properly track the command state and
             // invoke this at the appropriate moment.  Retaking ownership
             // of the underlying pointer ensures the destructor gets called
-            unsafe { Box::<StatefulCommand<T>>::from_raw(state) };
+            unsafe { Box::from_raw(state) };
         }
 
         unsafe {

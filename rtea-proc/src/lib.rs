@@ -264,3 +264,123 @@ pub fn module_unload(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn module_safe_unload(attr: TokenStream, item: TokenStream) -> TokenStream {
     module_unload_common("Safe", attr, item)
 }
+
+fn get_struct_name(item: TokenStream) -> String {
+    let mut next_item = false;
+    for i in item {
+        if next_item {
+            return i.to_string();
+        } else if i.to_string() == "struct" {
+            next_item = true;
+        }
+    }
+    panic!("Not a struct")
+}
+
+#[proc_macro_derive(TclObjectType)]
+pub fn generate_tcl_object(item: TokenStream) -> TokenStream {
+    let obj_name = get_struct_name(item);
+    let tcl_obj_name = format!("{}_TCL_OBJECT", obj_name.to_uppercase());
+    let mut out_stream = TokenStream::new();
+
+    out_stream.extend(
+        TokenStream::from_str(&format!(
+            r#"
+                extern "C" fn {obj_name}_tcl_free(obj: *mut RawObject) {{
+                    unsafe {{
+                        Box::from_raw((*obj).ptr1 as *mut {obj_name});
+                    }}
+                }}
+
+                extern "C" fn {obj_name}_tcl_dup(obj: *const RawObject, new_obj: *mut RawObject) {{
+                    unsafe {{
+                        let new_rep = Box::into_raw(Box::new(((*obj).ptr1 as *mut {obj_name}).as_ref().unwrap().clone())) as *mut std::ffi::c_void;
+                        (*new_obj).ptr1 = new_rep;
+                        (*new_obj).obj_type = (&{tcl_obj_name}) as *const ObjectType;
+                    }}
+                }}
+
+                extern "C" fn {obj_name}_tcl_update(obj: *mut RawObject) {{
+                    unsafe {{
+                        let inner = ((*obj).ptr1 as *mut {obj_name}).as_ref().unwrap();
+                        let (tcl_str, tcl_str_len) = rtea::tcl_string(&inner.as_string());
+                        (*obj).bytes = tcl_str;
+                        (*obj).length = tcl_str_len as i32;
+                    }}
+                }}
+
+                extern "C" fn {obj_name}_tcl_from(interp: *const Interpreter, obj: *mut RawObject) -> TclStatus {{
+                    let interp = unsafe {{ interp.as_ref() }};
+                    let obj = RawObject::wrap(obj);
+
+                    let (res, _obj) = match {obj_name}::convert(obj) {{
+                        Ok(obj) => {{
+                            (TclStatus::Ok, obj)
+                        }}
+                        Err(obj) => {{
+                            (TclStatus::Error, obj)
+                        }}
+                    }};
+
+                    if res == TclStatus::Error && interp.is_some() {{
+                        let interp = interp.unwrap();
+                        interp.set_result("could not convert to '{obj_name}' type")
+                    }}
+
+                    res
+                }}
+
+                static {tcl_obj_name}: ObjectType = ObjectType {{
+                    name: "{obj_name}\0".as_ptr(),
+                    free_internal_rep_proc: Some({obj_name}_tcl_free),
+                    dup_internal_rep_proc: {obj_name}_tcl_dup,
+                    update_string_proc: Some({obj_name}_tcl_update),
+                    set_from_any_proc: Some({obj_name}_tcl_from),
+                }};
+
+                impl rtea::TclObjectType for {obj_name} {{
+                    fn from_object(obj: &rtea::Object) -> Option<&{obj_name}> {{
+                        let obj_type_ptr = (&{tcl_obj_name}) as *const ObjectType;
+                        unsafe {{
+                            if (*obj.obj).obj_type != obj_type_ptr {{
+                                {obj_name}_tcl_from(std::ptr::null(), obj.obj);
+                            }}
+
+                            if (*obj.obj).obj_type == obj_type_ptr {{
+                                Some(((*obj.obj).ptr1 as *const {obj_name}).as_ref().unwrap())
+                            }} else {{
+                                None
+                            }}
+                        }}
+                    }}
+
+                    fn into_object(self) ->rtea::Object {{
+                        let ptr = Box::into_raw(Box::new(self)) as *mut std::ffi::c_void;
+                        let obj = rtea::Object::new();
+                        unsafe {{
+                            (*obj.obj).ptr1 = ptr;
+                            (*obj.obj).obj_type = (&{tcl_obj_name}) as *const rtea::ObjectType;
+                            (*obj.obj).bytes = std::ptr::null_mut();
+                        }}
+                        obj
+                    }}
+
+                    fn type_name() -> &'static str {{ "{obj_name}" }}
+
+                    fn tcl_type() -> &'static ObjectType {{ &{tcl_obj_name} }}
+                }}
+
+                impl From<{obj_name}> for rtea::Object {{
+                    fn from(pt: {obj_name}) -> rtea::Object {{
+                        pt.into_object()
+                    }}
+                }}
+            "#,
+            obj_name = obj_name,
+            tcl_obj_name = tcl_obj_name,
+        ))
+        .unwrap(),
+    );
+
+    out_stream
+}

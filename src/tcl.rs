@@ -25,11 +25,31 @@ pub(crate) static mut IS_SHARED: extern "C" fn(*const RawObject) -> isize = is_s
 pub(crate) static mut INVALIDATE_STRING_REP: Option<extern "C" fn(*mut RawObject)> = None;
 pub(crate) static mut GET_STRING: Option<extern "C" fn(*const RawObject) -> *const c_char> = None;
 
-pub(crate) static mut REGISTER_OBJ_TYPE: Option<extern "C" fn(*const ObjectType)> = None;
 pub(crate) static mut GET_OBJ_TYPE: Option<extern "C" fn(*const u8) -> *const ObjectType> = None;
 pub(crate) static mut CONVERT_TO_TYPE: Option<
     extern "C" fn(*const Interpreter, *mut RawObject, *const ObjectType) -> TclStatus,
 > = None;
+
+pub(crate) static mut NEW_STRING_OBJ: Option<extern "C" fn(*const c_char, i32) -> *mut RawObject> =
+    None;
+
+pub(crate) static mut SET_STRING_OBJ: Option<extern "C" fn(*mut RawObject, *const c_char, i32)> =
+    None;
+
+pub fn tcl_string(rust_str: &str) -> (*mut c_char, usize) {
+    let tcl_alloc_len = rust_str.len() + 1;
+    unsafe {
+        {
+            let tcl_buf = ALLOC.expect("module not initialized")(tcl_alloc_len);
+            let tcl_str = std::slice::from_raw_parts_mut(tcl_buf, tcl_alloc_len);
+            tcl_str[..rust_str.len()].copy_from_slice(rust_str.as_bytes());
+            if let Some(terminator) = tcl_str.last_mut() {
+                *terminator = 0;
+            }
+            (tcl_str.as_ptr() as *mut c_char, rust_str.len())
+        }
+    }
+}
 
 extern "C" fn incr_ref_count(obj: *mut RawObject) {
     unsafe {
