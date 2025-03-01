@@ -1,6 +1,6 @@
 [package]
 name = "rtea"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["John Rollinson <code@jrolli.dev>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/jrolli/rtea"
@@ -8,10 +8,10 @@ documentation = "https://docs.rs/rtea/"
 description = "Makes writing Tcl extensions in Rust ergonomic."
 readme = "README.md"
 keywords = ["tcl", "tea", "rust"]
-edition = "2018"
+edition = "2024"
 
 [lib]
 crate-type = ["rlib"]
 
 [dependencies]
-rtea-proc = { path = "rtea-proc", version = "2.0.0" }
+rtea-proc = { path = "rtea-proc", version = "3.0.0" }

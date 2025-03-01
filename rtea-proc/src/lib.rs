@@ -277,6 +277,7 @@ fn get_struct_name(item: TokenStream) -> String {
     panic!("Not a struct")
 }
 
+/// Creates a Tcl Object Type for this struct
 #[proc_macro_derive(TclObjectType)]
 pub fn generate_tcl_object(item: TokenStream) -> TokenStream {
     let obj_name = get_struct_name(item);
@@ -288,7 +289,7 @@ pub fn generate_tcl_object(item: TokenStream) -> TokenStream {
             r#"
                 extern "C" fn {obj_name}_tcl_free(obj: *mut RawObject) {{
                     unsafe {{
-                        Box::from_raw((*obj).ptr1 as *mut {obj_name});
+                        drop(Box::from_raw((*obj).ptr1 as *mut {obj_name}));
                     }}
                 }}
 
@@ -305,7 +306,7 @@ pub fn generate_tcl_object(item: TokenStream) -> TokenStream {
                         let inner = ((*obj).ptr1 as *mut {obj_name}).as_ref().unwrap();
                         let (tcl_str, tcl_str_len) = rtea::tcl_string(&inner.as_string());
                         (*obj).bytes = tcl_str;
-                        (*obj).length = tcl_str_len as i32;
+                        (*obj).length = tcl_str_len as usize;
                     }}
                 }}
 

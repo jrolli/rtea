@@ -1,11 +1,12 @@
-use std::ffi::c_void;
 use std::ffi::CStr;
+use std::ffi::CString;
+use std::ffi::c_void;
 use std::fmt::Display;
 use std::os::raw::c_char;
 
-use crate::tcl::*;
 use crate::Interpreter;
 use crate::TclStatus;
+use crate::tcl::*;
 
 /// A wrapper for [Tcl objects](https://www.tcl.tk/man/tcl/TclLib/Object.html).
 ///
@@ -13,9 +14,9 @@ use crate::TclStatus;
 #[repr(C)]
 #[derive(Debug)]
 pub struct RawObject {
-    pub(crate) ref_count: i32,
+    pub(crate) ref_count: usize,
     pub bytes: *mut c_char,
-    pub length: i32,
+    pub length: usize,
     pub obj_type: *const ObjectType,
     pub ptr1: *mut c_void,
     pub ptr2: *mut c_void,
@@ -23,7 +24,11 @@ pub struct RawObject {
 
 impl RawObject {
     pub fn wrap(obj: *mut RawObject) -> Object {
-        unsafe { INCR_REF_COUNT(obj) };
+        unsafe { 
+            INCR_REF_COUNT
+            .expect("module must have been initialized")
+            (obj)
+        };
         Object { obj: obj }
     }
 }
@@ -39,20 +44,22 @@ impl Object {
     }
 
     pub fn new_string(s: &str) -> Object {
+        let cstr = CString::new(s).expect("Unexpected NulError!");
         unsafe {
             RawObject::wrap(NEW_STRING_OBJ.expect("module must have been initialized")(
-                s.as_ptr() as *const i8,
-                s.len() as i32,
+                cstr.as_ptr() as *const i8,
+                cstr.as_bytes().len() as usize,
             ))
         }
     }
 
     pub fn set_string(&self, s: &str) {
+        let cstr = CString::new(s).expect("unexpected NulError!");
         unsafe {
             SET_STRING_OBJ.expect("module must have been initialized")(
                 self.obj,
-                s.as_ptr() as *const i8,
-                s.len() as i32,
+                cstr.as_ptr() as *const i8,
+                cstr.as_bytes().len() as usize,
             );
         }
     }
@@ -86,7 +93,7 @@ impl Object {
 
 impl Drop for Object {
     fn drop(&mut self) {
-        unsafe { DECR_REF_COUNT(self.obj) }
+        unsafe { DECR_REF_COUNT.expect("module must have been initialized")(self.obj) }
     }
 }
 

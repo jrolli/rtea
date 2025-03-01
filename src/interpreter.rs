@@ -1,12 +1,17 @@
-use std::ffi::c_void;
 use std::ffi::CString;
+use std::ffi::c_double;
+use std::ffi::c_int;
+use std::ffi::c_longlong;
+use std::ffi::c_uint;
+use std::ffi::c_ulonglong;
+use std::ffi::c_void;
 use std::os::raw::c_char;
 
-use crate::tcl::*;
 use crate::Object;
 use crate::ObjectType;
 use crate::RawObject;
 use crate::TclObjectType;
+use crate::tcl::*;
 
 /// A wrapper around a [Tcl](https://www.tcl.tk) interpreter object.
 ///
@@ -31,7 +36,7 @@ pub struct Interpreter {
 type CmdProc = fn(interp: &Interpreter, args: Vec<&str>) -> Result<TclStatus, String>;
 type ObjCmdProc = fn(interp: &Interpreter, args: Vec<Object>) -> Result<TclStatus, Object>;
 
-const TCL_STUB_MAGIC: u32 = 0xFCA3BACF; // Tcl 8.x extension
+const TCL_STUB_MAGIC: u32 = 0xFCA3BACB + size_of::<*const c_void>() as u32;
 
 /// A wrapper for Tcl return status codes.
 ///
@@ -49,6 +54,18 @@ pub enum TclStatus {
     Continue = 4,
 }
 
+impl From<i32> for TclStatus {
+    fn from(val: i32) -> Self {
+        match val {
+            0 => TclStatus::Ok,
+            2 => TclStatus::Return,
+            3 => TclStatus::Break,
+            4 => TclStatus::Continue,
+            _ => TclStatus::Error,
+        }
+    }
+}
+
 /// A wrapper for values passed to Tcl's [unload](https://www.tcl.tk/man/tcl/TclCmd/unload.html) function.
 #[repr(isize)]
 pub enum TclUnloadFlag {
@@ -62,676 +79,1085 @@ pub enum TclUnloadFlag {
 
 const _TCL_STATIC: *const c_void = 0 as *const c_void;
 const _TCL_VOLATILE: *const c_void = 1 as *const c_void;
-const TCL_DYNAMIC: *const c_void = 3 as *const c_void;
+const _TCL_DYNAMIC: *const c_void = 3 as *const c_void;
 
 #[repr(C)]
+#[allow(non_snake_case)]
+#[derive(Debug)]
 struct Stubs {
     magic: u32,
     hooks: *const c_void,
-    pkg_provide_ex:
-        extern "C" fn(*const Interpreter, *const c_char, *const c_char, *const c_void) -> TclStatus,
-    _untranslated_function1: *const c_void,  // 1
-    _untranslated_function2: *const c_void,  // 2
-    _untranslated_function3: *const c_void,  // 3
-    free: extern "C" fn(*mut u8),            // 4
-    _untranslated_function5: *const c_void,  // 5
-    _untranslated_function6: *const c_void,  // 6
-    _untranslated_function7: *const c_void,  // 7
-    _untranslated_function8: *const c_void,  // 8
-    _untranslated_function9: *const c_void,  // 9
-    _untranslated_function10: *const c_void, // 10
-    _untranslated_function11: *const c_void, // 11
-    _untranslated_function12: *const c_void, // 12
-    _untranslated_function13: *const c_void, // 13
-    _untranslated_function14: *const c_void, // 14
-    _untranslated_function15: *const c_void, // 15
-    _untranslated_function16: *const c_void, // 16
-    _untranslated_function17: *const c_void, // 17
-    convert_to_type:
-        extern "C" fn(*const Interpreter, *mut RawObject, *const ObjectType) -> TclStatus, // 18
-    _untranslated_function19: *const c_void, // 19
-    _untranslated_function20: *const c_void, // 20
-    _untranslated_function21: *const c_void, // 21
-    _untranslated_function22: *const c_void, // 22
-    _untranslated_function23: *const c_void, // 23
-    _untranslated_function24: *const c_void, // 24
-    _untranslated_function25: *const c_void, // 25
-    _untranslated_function26: *const c_void, // 26
-    _untranslated_function27: *const c_void, // 27
-    _untranslated_function28: *const c_void, // 28
-    duplicate_obj: extern "C" fn(*const RawObject) -> *mut RawObject, // 29
-    free_obj: extern "C" fn(*mut RawObject), // 30
-    _untranslated_function31: *const c_void, // 31
-    _untranslated_function32: *const c_void, // 32
-    _untranslated_function33: *const c_void, // 33
-    _untranslated_function34: *const c_void, // 34
-    _untranslated_function35: *const c_void, // 35
-    _untranslated_function36: *const c_void, // 36
-    _untranslated_function37: *const c_void, // 37
-    _untranslated_function38: *const c_void, // 38
-    _untranslated_function39: *const c_void, // 39
-    get_obj_type: extern "C" fn(*const u8) -> *const ObjectType, // 40
-    _untranslated_function41: *const c_void, // 41
-    invalidate_string_rep: extern "C" fn(*mut RawObject), // 42
-    _untranslated_function43: *const c_void, // 43
-    _untranslated_function44: *const c_void, // 44
-    _untranslated_function45: *const c_void, // 45
-    _untranslated_function46: *const c_void, // 46
-    _untranslated_function47: *const c_void, // 47
-    _untranslated_function48: *const c_void, // 48
-    _untranslated_function49: *const c_void, // 49
-    _untranslated_function50: *const c_void, // 50
-    _untranslated_function51: *const c_void, // 51
-    _untranslated_function52: *const c_void, // 52
-    _untranslated_function53: *const c_void, // 53
-    _untranslated_function54: *const c_void, // 54
-    new_obj: extern "C" fn() -> *mut RawObject, // 55
-    new_string_obj: extern "C" fn(*const c_char, i32) -> *mut RawObject, // 56
-    _untranslated_function57: *const c_void, // 57
-    _untranslated_function58: *const c_void, // 58
-    _untranslated_function59: *const c_void, // 59
-    _untranslated_function60: *const c_void, // 60
-    _untranslated_function61: *const c_void, // 61
-    _untranslated_function62: *const c_void, // 62
-    _untranslated_function63: *const c_void, // 63
-    _untranslated_function64: *const c_void, // 64
-    set_string_obj: extern "C" fn(*mut RawObject, *const c_char, i32), // 65
-    _untranslated_function66: *const c_void, // 66
-    _untranslated_function67: *const c_void, // 67
-    _untranslated_function68: *const c_void, // 68
-    _untranslated_function69: *const c_void, // 69
-    _untranslated_function70: *const c_void, // 70
-    _untranslated_function71: *const c_void, // 71
-    _untranslated_function72: *const c_void, // 72
-    _untranslated_function73: *const c_void, // 73
-    _untranslated_function74: *const c_void, // 74
-    _untranslated_function75: *const c_void, // 75
-    _untranslated_function76: *const c_void, // 76
-    _untranslated_function77: *const c_void, // 77
-    _untranslated_function78: *const c_void, // 78
-    _untranslated_function79: *const c_void, // 79
-    _untranslated_function80: *const c_void, // 80
-    _untranslated_function81: *const c_void, // 81
-    _untranslated_function82: *const c_void, // 82
-    _untranslated_function83: *const c_void, // 83
-    _untranslated_function84: *const c_void, // 84
-    _untranslated_function85: *const c_void, // 85
-    _untranslated_function86: *const c_void, // 86
-    _untranslated_function87: *const c_void, // 87
-    _untranslated_function88: *const c_void, // 88
-    _untranslated_function89: *const c_void, // 89
-    _untranslated_function90: *const c_void, // 90
-    create_command: extern "C" fn(
+    Tcl_PkgProvideEx:
+        extern "C" fn(*const Interpreter, *const c_char, *const c_char, *const c_void) -> c_int, // 0
+    Tcl_PkgRequireEx: extern "C" fn(
         *const Interpreter,
         *const c_char,
-        *const c_void,
-        *const c_void,
-        *const c_void,
-    ) -> *const c_void, // 91
-    _untranslated_function92: *const c_void, // 92
-    _untranslated_function93: *const c_void, // 93
-    _untranslated_function94: *const c_void, // 94
-    _untranslated_function95: *const c_void, // 95
-    create_obj_command: extern "C" fn(
+        *const c_char,
+        c_int,
+        *mut c_void,
+    ) -> *const c_char, // 1
+    Tcl_Panic: extern "C" fn(*const c_char, *const c_char), // 2
+    Tcl_Alloc: extern "C" fn(usize) -> *mut c_void,         // 3
+    Tcl_Free: extern "C" fn(*mut c_void),                   // 4
+    Tcl_Realloc: extern "C" fn(*mut c_void, usize) -> *mut c_void, // 5
+    Tcl_DbCkalloc: extern "C" fn(usize, *const c_char, c_int) -> *mut c_void, // 6
+    Tcl_DbCkfree: extern "C" fn(*mut c_void, *const c_char, c_int), // 7
+    Tcl_DbCkrealloc: extern "C" fn(*mut c_void, usize, *const c_char, c_int) -> *mut c_void, // 8
+    Tcl_CreateFileHandler: extern "C" fn(c_int, c_int, *mut c_void, *mut c_void), // 9
+    Tcl_DeleteFileHandler: extern "C" fn(c_int),            // 10
+    Tcl_SetTimer: extern "C" fn(*const c_void),             // 11
+    Tcl_Sleep: extern "C" fn(c_int),                        // 12
+    Tcl_WaitForEvent: extern "C" fn(*const c_void) -> c_int, // 13
+    Tcl_AppendAllObjTypes: extern "C" fn(*const Interpreter, *mut RawObject) -> c_int, // 14
+    Tcl_AppendStringsToObj: extern "C" fn(*mut RawObject, *mut RawObject), // 15
+    Tcl_AppendToObj: extern "C" fn(*mut RawObject, *const c_char, usize), // 16
+    Tcl_ConcatObj: extern "C" fn(usize, *mut c_void) -> *mut RawObject, // 17
+    Tcl_ConvertToType:
+        extern "C" fn(*const Interpreter, *mut RawObject, *const ObjectType) -> c_int, // 18
+    Tcl_DbDecrRefCount: extern "C" fn(*mut RawObject, *const c_char, c_int), // 19
+    Tcl_DbIncrRefCount: extern "C" fn(*mut RawObject, *const c_char, c_int), // 20
+    Tcl_DbIsShared: extern "C" fn(*mut RawObject, *const c_char, c_int) -> c_int, // 21
+    _deprecated_22: *const c_void,                          // 22
+    Tcl_DbNewByteArrayObj:
+        extern "C" fn(*const c_void, usize, *const c_char, c_int) -> *mut RawObject, // 23
+    Tcl_DbNewDoubleObj: extern "C" fn(c_double, *const c_char, c_int) -> *mut RawObject, // 24
+    Tcl_DbNewListObj: extern "C" fn(usize, *mut c_void, *const c_char, c_int) -> *mut RawObject, // 25
+    _deprecated_26: *const c_void, // 26
+    Tcl_DbNewObj: extern "C" fn(*const c_char, c_int) -> *mut RawObject, // 27
+    Tcl_DbNewStringObj: extern "C" fn(*const c_char, usize, *const c_char, c_int) -> *mut RawObject, // 28
+    Tcl_DuplicateObj: extern "C" fn(*mut RawObject) -> *mut RawObject, // 29
+    TclFreeObj: extern "C" fn(*mut RawObject),                         // 30
+    Tcl_GetBoolean: extern "C" fn(*const Interpreter, *const c_char, *mut c_void) -> c_int, // 31
+    Tcl_GetBooleanFromObj: extern "C" fn(*const Interpreter, *mut RawObject, *mut c_void) -> c_int, // 32
+    Tcl_GetByteArrayFromObj: extern "C" fn(*mut RawObject, *mut c_void) -> *mut c_void, // 33
+    Tcl_GetDouble: extern "C" fn(*const Interpreter, *const c_char, *mut c_void) -> c_int, // 34
+    Tcl_GetDoubleFromObj: extern "C" fn(*const Interpreter, *mut RawObject, *mut c_void) -> c_int, // 35
+    _deprecated_36: *const c_void, // 36
+    Tcl_GetInt: extern "C" fn(*const Interpreter, *const c_char, *mut c_void) -> c_int, // 37
+    Tcl_GetIntFromObj: extern "C" fn(*const Interpreter, *mut RawObject, *mut c_void) -> c_int, // 38
+    Tcl_GetLongFromObj: extern "C" fn(*const Interpreter, *mut RawObject, *mut c_void) -> c_int, // 39
+    Tcl_GetObjType: extern "C" fn(*const c_char) -> *const ObjectType, // 40
+    TclGetStringFromObj: extern "C" fn(*mut RawObject, *mut c_void) -> *mut c_void, // 41
+    Tcl_InvalidateStringRep: extern "C" fn(*mut RawObject),            // 42
+    Tcl_ListObjAppendList:
+        extern "C" fn(*const Interpreter, *mut RawObject, *mut RawObject) -> c_int, // 43
+    Tcl_ListObjAppendElement:
+        extern "C" fn(*const Interpreter, *mut RawObject, *mut RawObject) -> c_int, // 44
+    TclListObjGetElements:
+        extern "C" fn(*const Interpreter, *mut RawObject, *mut c_void, *mut c_void) -> c_int, // 45
+    Tcl_ListObjIndex:
+        extern "C" fn(*const Interpreter, *mut RawObject, usize, *mut c_void) -> c_int, // 46
+    TclListObjLength: extern "C" fn(*const Interpreter, *mut RawObject, *mut c_void) -> c_int, // 47
+    Tcl_ListObjReplace: extern "C" fn(
+        *const Interpreter,
+        *mut RawObject,
+        usize,
+        usize,
+        usize,
+        *mut c_void,
+    ) -> c_int, // 48
+    _deprecated_49: *const c_void,                                     // 49
+    Tcl_NewByteArrayObj: extern "C" fn(*const c_void, usize) -> *mut RawObject, // 50
+    Tcl_NewDoubleObj: extern "C" fn(c_double) -> *mut RawObject,       // 51
+    _deprecated_52: *const c_void,                                     // 52
+    Tcl_NewListObj: extern "C" fn(usize, *mut c_void) -> *mut RawObject, // 53
+    _deprecated_54: *const c_void,                                     // 54
+    Tcl_NewObj: extern "C" fn() -> *mut RawObject,                     // 55
+    Tcl_NewStringObj: extern "C" fn(*const c_char, usize) -> *mut RawObject, // 56
+    _deprecated_57: *const c_void,                                     // 57
+    Tcl_SetByteArrayLength: extern "C" fn(*mut RawObject, usize) -> *mut c_void, // 58
+    Tcl_SetByteArrayObj: extern "C" fn(*mut RawObject, *const c_void, usize), // 59
+    Tcl_SetDoubleObj: extern "C" fn(*mut RawObject, c_double),         // 60
+    _deprecated_61: *const c_void,                                     // 61
+    Tcl_SetListObj: extern "C" fn(*mut RawObject, usize, *mut c_void), // 62
+    _deprecated_63: *const c_void,                                     // 63
+    Tcl_SetObjLength: extern "C" fn(*mut RawObject, usize),            // 64
+    Tcl_SetStringObj: extern "C" fn(*mut RawObject, *const c_char, usize), // 65
+    _deprecated_66: *const c_void,                                     // 66
+    _deprecated_67: *const c_void,                                     // 67
+    Tcl_AllowExceptions: extern "C" fn(*const Interpreter),            // 68
+    Tcl_AppendElement: extern "C" fn(*const Interpreter, *const c_char), // 69
+    Tcl_AppendResult: extern "C" fn(*const Interpreter, *const Interpreter), // 70
+    Tcl_AsyncCreate: extern "C" fn(*mut c_void, *mut c_void) -> *mut c_void, // 71
+    Tcl_AsyncDelete: extern "C" fn(*mut c_void),                       // 72
+    Tcl_AsyncInvoke: extern "C" fn(*const Interpreter, c_int) -> c_int, // 73
+    Tcl_AsyncMark: extern "C" fn(*mut c_void),                         // 74
+    Tcl_AsyncReady: extern "C" fn() -> c_int,                          // 75
+    _deprecated_76: *const c_void,                                     // 76
+    _deprecated_77: *const c_void,                                     // 77
+    Tcl_BadChannelOption: extern "C" fn(*const Interpreter, *const c_char, *const c_char) -> c_int, // 78
+    Tcl_CallWhenDeleted: extern "C" fn(*const Interpreter, *mut c_void, *mut c_void), // 79
+    Tcl_CancelIdleCall: extern "C" fn(*mut c_void, *mut c_void),                      // 80
+    Tcl_Close: extern "C" fn(*const Interpreter, *mut c_void) -> c_int,               // 81
+    Tcl_CommandComplete: extern "C" fn(*const c_char) -> c_int,                       // 82
+    Tcl_Concat: extern "C" fn(usize, *const c_void) -> *mut c_void,                   // 83
+    Tcl_ConvertElement: extern "C" fn(*const c_char, *mut c_void, c_int) -> usize,    // 84
+    Tcl_ConvertCountedElement: extern "C" fn(*const c_char, usize, *mut c_void, c_int) -> usize, // 85
+    Tcl_CreateAlias: extern "C" fn(
         *const Interpreter,
         *const c_char,
+        *const Interpreter,
+        *const c_char,
+        usize,
         *const c_void,
+    ) -> c_int, // 86
+    Tcl_CreateAliasObj: extern "C" fn(
+        *const Interpreter,
+        *const c_char,
+        *const Interpreter,
+        *const c_char,
+        usize,
+        *mut c_void,
+    ) -> c_int, // 87
+    Tcl_CreateChannel:
+        extern "C" fn(*const c_void, *const c_char, *mut c_void, c_int) -> *mut c_void, // 88
+    Tcl_CreateChannelHandler: extern "C" fn(*mut c_void, c_int, *mut c_void, *mut c_void), // 89
+    Tcl_CreateCloseHandler: extern "C" fn(*mut c_void, *mut c_void, *mut c_void),          // 90
+    Tcl_CreateCommand: extern "C" fn(
+        *const Interpreter,
+        *const c_char,
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+    ) -> *mut c_void, // 91
+    Tcl_CreateEventSource: extern "C" fn(*mut c_void, *mut c_void, *mut c_void),           // 92
+    Tcl_CreateExitHandler: extern "C" fn(*mut c_void, *mut c_void),                        // 93
+    Tcl_CreateInterp: extern "C" fn() -> *const Interpreter,                               // 94
+    _deprecated_95: *const c_void,                                                         // 95
+    Tcl_CreateObjCommand: extern "C" fn(
+        *const Interpreter,
+        *const c_char,
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+    ) -> *mut c_void, // 96
+    Tcl_CreateChild: extern "C" fn(*const Interpreter, *const c_char, c_int) -> *const Interpreter, // 97
+    Tcl_CreateTimerHandler: extern "C" fn(c_int, *mut c_void, *mut c_void) -> *mut c_void, // 98
+    Tcl_CreateTrace:
+        extern "C" fn(*const Interpreter, usize, *mut c_void, *mut c_void) -> *mut c_void, // 99
+    Tcl_DeleteAssocData: extern "C" fn(*const Interpreter, *const c_char),                 // 100
+    Tcl_DeleteChannelHandler: extern "C" fn(*mut c_void, *mut c_void, *mut c_void),        // 101
+    Tcl_DeleteCloseHandler: extern "C" fn(*mut c_void, *mut c_void, *mut c_void),          // 102
+    Tcl_DeleteCommand: extern "C" fn(*const Interpreter, *const c_char) -> c_int,          // 103
+    Tcl_DeleteCommandFromToken: extern "C" fn(*const Interpreter, *mut c_void) -> c_int,   // 104
+    Tcl_DeleteEvents: extern "C" fn(*mut c_void, *mut c_void),                             // 105
+    Tcl_DeleteEventSource: extern "C" fn(*mut c_void, *mut c_void, *mut c_void),           // 106
+    Tcl_DeleteExitHandler: extern "C" fn(*mut c_void, *mut c_void),                        // 107
+    Tcl_DeleteHashEntry: extern "C" fn(*mut c_void),                                       // 108
+    Tcl_DeleteHashTable: extern "C" fn(*mut c_void),                                       // 109
+    Tcl_DeleteInterp: extern "C" fn(*const Interpreter),                                   // 110
+    Tcl_DetachPids: extern "C" fn(usize, *mut c_void),                                     // 111
+    Tcl_DeleteTimerHandler: extern "C" fn(*mut c_void),                                    // 112
+    Tcl_DeleteTrace: extern "C" fn(*const Interpreter, *mut c_void),                       // 113
+    Tcl_DontCallWhenDeleted: extern "C" fn(*const Interpreter, *mut c_void, *mut c_void),  // 114
+    Tcl_DoOneEvent: extern "C" fn(c_int) -> c_int,                                         // 115
+    Tcl_DoWhenIdle: extern "C" fn(*mut c_void, *mut c_void),                               // 116
+    Tcl_DStringAppend: extern "C" fn(*mut c_void, *const c_char, usize) -> *mut c_void,    // 117
+    Tcl_DStringAppendElement: extern "C" fn(*mut c_void, *const c_char) -> *mut c_void,    // 118
+    Tcl_DStringEndSublist: extern "C" fn(*mut c_void),                                     // 119
+    Tcl_DStringFree: extern "C" fn(*mut c_void),                                           // 120
+    Tcl_DStringGetResult: extern "C" fn(*const Interpreter, *mut c_void),                  // 121
+    Tcl_DStringInit: extern "C" fn(*mut c_void),                                           // 122
+    Tcl_DStringResult: extern "C" fn(*const Interpreter, *mut c_void),                     // 123
+    Tcl_DStringSetLength: extern "C" fn(*mut c_void, usize),                               // 124
+    Tcl_DStringStartSublist: extern "C" fn(*mut c_void),                                   // 125
+    Tcl_Eof: extern "C" fn(*mut c_void) -> c_int,                                          // 126
+    Tcl_ErrnoId: extern "C" fn() -> *const c_char,                                         // 127
+    Tcl_ErrnoMsg: extern "C" fn(c_int) -> *const c_char,                                   // 128
+    _deprecated_129: *const c_void,                                                        // 129
+    Tcl_EvalFile: extern "C" fn(*const Interpreter, *const c_char) -> c_int,               // 130
+    _deprecated_131: *const c_void,                                                        // 131
+    Tcl_EventuallyFree: extern "C" fn(*mut c_void, *mut c_void),                           // 132
+    Tcl_Exit: extern "C" fn(c_int),                                                        // 133
+    Tcl_ExposeCommand: extern "C" fn(*const Interpreter, *const c_char, *const c_char) -> c_int, // 134
+    Tcl_ExprBoolean: extern "C" fn(*const Interpreter, *const c_char, *mut c_void) -> c_int, // 135
+    Tcl_ExprBooleanObj: extern "C" fn(*const Interpreter, *mut RawObject, *mut c_void) -> c_int, // 136
+    Tcl_ExprDouble: extern "C" fn(*const Interpreter, *const c_char, *mut c_void) -> c_int, // 137
+    Tcl_ExprDoubleObj: extern "C" fn(*const Interpreter, *mut RawObject, *mut c_void) -> c_int, // 138
+    Tcl_ExprLong: extern "C" fn(*const Interpreter, *const c_char, *mut c_void) -> c_int, // 139
+    Tcl_ExprLongObj: extern "C" fn(*const Interpreter, *mut RawObject, *mut c_void) -> c_int, // 140
+    Tcl_ExprObj: extern "C" fn(*const Interpreter, *mut RawObject, *mut c_void) -> c_int, // 141
+    Tcl_ExprString: extern "C" fn(*const Interpreter, *const c_char) -> c_int,            // 142
+    Tcl_Finalize: extern "C" fn(),                                                        // 143
+    _deprecated_144: *const c_void,                                                       // 144
+    Tcl_FirstHashEntry: extern "C" fn(*mut c_void, *mut c_void) -> *mut c_void,           // 145
+    Tcl_Flush: extern "C" fn(*mut c_void) -> c_int,                                       // 146
+    _deprecated_147: *const c_void,                                                       // 147
+    _deprecated_148: *const c_void,                                                       // 148
+    TclGetAliasObj: extern "C" fn(
+        *const Interpreter,
+        *const c_char,
+        *mut c_void,
         *const c_void,
+        *mut c_void,
+        *mut c_void,
+    ) -> c_int, // 149
+    Tcl_GetAssocData: extern "C" fn(*const Interpreter, *const c_char, *mut c_void) -> *mut c_void, // 150
+    Tcl_GetChannel: extern "C" fn(*const Interpreter, *const c_char, *mut c_void) -> *mut c_void, // 151
+    Tcl_GetChannelBufferSize: extern "C" fn(*mut c_void) -> usize, // 152
+    Tcl_GetChannelHandle: extern "C" fn(*mut c_void, c_int, *mut c_void) -> c_int, // 153
+    Tcl_GetChannelInstanceData: extern "C" fn(*mut c_void) -> *mut c_void, // 154
+    Tcl_GetChannelMode: extern "C" fn(*mut c_void) -> c_int,       // 155
+    Tcl_GetChannelName: extern "C" fn(*mut c_void) -> *const c_char, // 156
+    Tcl_GetChannelOption:
+        extern "C" fn(*const Interpreter, *mut c_void, *const c_char, *mut c_void) -> c_int, // 157
+    Tcl_GetChannelType: extern "C" fn(*mut c_void) -> *const c_void, // 158
+    Tcl_GetCommandInfo: extern "C" fn(*const Interpreter, *const c_char, *mut c_void) -> c_int, // 159
+    Tcl_GetCommandName: extern "C" fn(*const Interpreter, *mut c_void) -> *const c_char, // 160
+    Tcl_GetErrno: extern "C" fn() -> c_int,                                              // 161
+    Tcl_GetHostName: extern "C" fn() -> *const c_char,                                   // 162
+    Tcl_GetInterpPath: extern "C" fn(*const Interpreter, *const Interpreter) -> c_int,   // 163
+    Tcl_GetParent: extern "C" fn(*const Interpreter) -> *const Interpreter,              // 164
+    Tcl_GetNameOfExecutable: extern "C" fn() -> *const c_char,                           // 165
+    Tcl_GetObjResult: extern "C" fn(*const Interpreter) -> *mut RawObject,               // 166
+    Tcl_GetOpenFile:
+        extern "C" fn(*const Interpreter, *const c_char, c_int, c_int, *mut c_void) -> c_int, // 167
+    Tcl_GetPathType: extern "C" fn(*const c_char) -> *mut c_void,                        // 168
+    Tcl_Gets: extern "C" fn(*mut c_void, *mut c_void) -> usize,                          // 169
+    Tcl_GetsObj: extern "C" fn(*mut c_void, *mut RawObject) -> usize,                    // 170
+    Tcl_GetServiceMode: extern "C" fn() -> c_int,                                        // 171
+    Tcl_GetChild: extern "C" fn(*const Interpreter, *const c_char) -> *const Interpreter, // 172
+    Tcl_GetStdChannel: extern "C" fn(c_int) -> *mut c_void,                              // 173
+    _deprecated_174: *const c_void,                                                      // 174
+    _deprecated_175: *const c_void,                                                      // 175
+    Tcl_GetVar2:
+        extern "C" fn(*const Interpreter, *const c_char, *const c_char, c_int) -> *const c_char, // 176
+    _deprecated_177: *const c_void, // 177
+    _deprecated_178: *const c_void, // 178
+    Tcl_HideCommand: extern "C" fn(*const Interpreter, *const c_char, *const c_char) -> c_int, // 179
+    Tcl_Init: extern "C" fn(*const Interpreter) -> c_int, // 180
+    Tcl_InitHashTable: extern "C" fn(*mut c_void, c_int), // 181
+    Tcl_InputBlocked: extern "C" fn(*mut c_void) -> c_int, // 182
+    Tcl_InputBuffered: extern "C" fn(*mut c_void) -> c_int, // 183
+    Tcl_InterpDeleted: extern "C" fn(*const Interpreter) -> c_int, // 184
+    Tcl_IsSafe: extern "C" fn(*const Interpreter) -> c_int, // 185
+    Tcl_JoinPath: extern "C" fn(usize, *const c_void, *mut c_void) -> *mut c_void, // 186
+    Tcl_LinkVar: extern "C" fn(*const Interpreter, *const c_char, *mut c_void, c_int) -> c_int, // 187
+    _deprecated_188: *const c_void, // 188
+    Tcl_MakeFileChannel: extern "C" fn(*mut c_void, c_int) -> *mut c_void, // 189
+    _deprecated_190: *const c_void, // 190
+    Tcl_MakeTcpClientChannel: extern "C" fn(*mut c_void) -> *mut c_void, // 191
+    Tcl_Merge: extern "C" fn(usize, *const c_void) -> *mut c_void, // 192
+    Tcl_NextHashEntry: extern "C" fn(*mut c_void) -> *mut c_void, // 193
+    Tcl_NotifyChannel: extern "C" fn(*mut c_void, c_int), // 194
+    Tcl_ObjGetVar2:
+        extern "C" fn(*const Interpreter, *mut RawObject, *mut RawObject, c_int) -> *mut RawObject, // 195
+    Tcl_ObjSetVar2: extern "C" fn(
+        *const Interpreter,
+        *mut RawObject,
+        *mut RawObject,
+        *mut RawObject,
+        c_int,
+    ) -> *mut RawObject, // 196
+    Tcl_OpenCommandChannel:
+        extern "C" fn(*const Interpreter, usize, *const c_void, c_int) -> *mut c_void, // 197
+    Tcl_OpenFileChannel:
+        extern "C" fn(*const Interpreter, *const c_char, *const c_char, c_int) -> *mut c_void, // 198
+    Tcl_OpenTcpClient: extern "C" fn(
+        *const Interpreter,
+        c_int,
+        *const c_char,
+        *const c_char,
+        c_int,
+        c_int,
+    ) -> *mut c_void, // 199
+    Tcl_OpenTcpServer: extern "C" fn(
+        *const Interpreter,
+        c_int,
+        *const c_char,
+        *mut c_void,
+        *mut c_void,
+    ) -> *mut c_void, // 200
+    Tcl_Preserve: extern "C" fn(*mut c_void), // 201
+    Tcl_PrintDouble: extern "C" fn(*const Interpreter, c_double, *mut c_void), // 202
+    Tcl_PutEnv: extern "C" fn(*const c_char) -> c_int, // 203
+    Tcl_PosixError: extern "C" fn(*const Interpreter) -> *const c_char, // 204
+    Tcl_QueueEvent: extern "C" fn(*mut c_void, c_int), // 205
+    Tcl_Read: extern "C" fn(*mut c_void, *mut c_void, usize) -> usize, // 206
+    Tcl_ReapDetachedProcs: extern "C" fn(),   // 207
+    Tcl_RecordAndEval: extern "C" fn(*const Interpreter, *const c_char, c_int) -> c_int, // 208
+    Tcl_RecordAndEvalObj: extern "C" fn(*const Interpreter, *mut RawObject, c_int) -> c_int, // 209
+    Tcl_RegisterChannel: extern "C" fn(*const Interpreter, *mut c_void), // 210
+    Tcl_RegisterObjType: extern "C" fn(*const ObjectType), // 211
+    Tcl_RegExpCompile: extern "C" fn(*const Interpreter, *const c_char) -> *mut c_void, // 212
+    Tcl_RegExpExec:
+        extern "C" fn(*const Interpreter, *mut c_void, *const c_char, *const c_char) -> c_int, // 213
+    Tcl_RegExpMatch: extern "C" fn(*const Interpreter, *const c_char, *const c_char) -> c_int, // 214
+    Tcl_RegExpRange: extern "C" fn(*mut c_void, usize, *const c_void, *const c_void), // 215
+    Tcl_Release: extern "C" fn(*mut c_void),                                          // 216
+    Tcl_ResetResult: extern "C" fn(*const Interpreter),                               // 217
+    Tcl_ScanElement: extern "C" fn(*const c_char, *mut c_void) -> usize,              // 218
+    Tcl_ScanCountedElement: extern "C" fn(*const c_char, usize, *mut c_void) -> usize, // 219
+    _deprecated_220: *const c_void,                                                   // 220
+    Tcl_ServiceAll: extern "C" fn() -> c_int,                                         // 221
+    Tcl_ServiceEvent: extern "C" fn(c_int) -> c_int,                                  // 222
+    Tcl_SetAssocData: extern "C" fn(*const Interpreter, *const c_char, *mut c_void, *mut c_void), // 223
+    Tcl_SetChannelBufferSize: extern "C" fn(*mut c_void, usize), // 224
+    Tcl_SetChannelOption:
+        extern "C" fn(*const Interpreter, *mut c_void, *const c_char, *const c_char) -> c_int, // 225
+    Tcl_SetCommandInfo: extern "C" fn(*const Interpreter, *const c_char, *const c_void) -> c_int, // 226
+    Tcl_SetErrno: extern "C" fn(c_int), // 227
+    Tcl_SetErrorCode: extern "C" fn(*const Interpreter, *const Interpreter), // 228
+    Tcl_SetMaxBlockTime: extern "C" fn(*const c_void), // 229
+    _deprecated_230: *const c_void,     // 230
+    Tcl_SetRecursionLimit: extern "C" fn(*const Interpreter, usize) -> usize, // 231
+    _deprecated_232: *const c_void,     // 232
+    Tcl_SetServiceMode: extern "C" fn(c_int) -> c_int, // 233
+    Tcl_SetObjErrorCode: extern "C" fn(*const Interpreter, *mut RawObject), // 234
+    Tcl_SetObjResult: extern "C" fn(*const Interpreter, *mut RawObject), // 235
+    Tcl_SetStdChannel: extern "C" fn(*mut c_void, c_int), // 236
+    _deprecated_237: *const c_void,     // 237
+    Tcl_SetVar2: extern "C" fn(
+        *const Interpreter,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        c_int,
+    ) -> *const c_char, // 238
+    Tcl_SignalId: extern "C" fn(c_int) -> *const c_char, // 239
+    Tcl_SignalMsg: extern "C" fn(c_int) -> *const c_char, // 240
+    Tcl_SourceRCFile: extern "C" fn(*const Interpreter), // 241
+    TclSplitList:
+        extern "C" fn(*const Interpreter, *const c_char, *mut c_void, *const c_void) -> c_int, // 242
+    TclSplitPath: extern "C" fn(*const c_char, *mut c_void, *const c_void), // 243
+    _deprecated_244: *const c_void,                                         // 244
+    _deprecated_245: *const c_void,                                         // 245
+    _deprecated_246: *const c_void,                                         // 246
+    _deprecated_247: *const c_void,                                         // 247
+    Tcl_TraceVar2: extern "C" fn(
+        *const Interpreter,
+        *const c_char,
+        *const c_char,
+        c_int,
+        *mut c_void,
+        *mut c_void,
+    ) -> c_int, // 248
+    Tcl_TranslateFileName:
+        extern "C" fn(*const Interpreter, *const c_char, *mut c_void) -> *mut c_void, // 249
+    Tcl_Ungets: extern "C" fn(*mut c_void, *const c_char, usize, c_int) -> usize, // 250
+    Tcl_UnlinkVar: extern "C" fn(*const Interpreter, *const c_char),        // 251
+    Tcl_UnregisterChannel: extern "C" fn(*const Interpreter, *mut c_void) -> c_int, // 252
+    _deprecated_253: *const c_void,                                         // 253
+    Tcl_UnsetVar2: extern "C" fn(*const Interpreter, *const c_char, *const c_char, c_int) -> c_int, // 254
+    _deprecated_255: *const c_void, // 255
+    Tcl_UntraceVar2: extern "C" fn(
+        *const Interpreter,
+        *const c_char,
+        *const c_char,
+        c_int,
+        *mut c_void,
+        *mut c_void,
+    ), // 256
+    Tcl_UpdateLinkedVar: extern "C" fn(*const Interpreter, *const c_char), // 257
+    _deprecated_258: *const c_void, // 258
+    Tcl_UpVar2: extern "C" fn(
+        *const Interpreter,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        c_int,
+    ) -> c_int, // 259
+    Tcl_VarEval: extern "C" fn(*const Interpreter, *const Interpreter) -> c_int, // 260
+    _deprecated_261: *const c_void, // 261
+    Tcl_VarTraceInfo2: extern "C" fn(
+        *const Interpreter,
+        *const c_char,
+        *const c_char,
+        c_int,
+        *mut c_void,
+        *mut c_void,
+    ) -> *mut c_void, // 262
+    Tcl_Write: extern "C" fn(*mut c_void, *const c_char, usize) -> usize, // 263
+    Tcl_WrongNumArgs: extern "C" fn(*const Interpreter, usize, *mut c_void, *const c_char), // 264
+    Tcl_DumpActiveMemory: extern "C" fn(*const c_char) -> c_int, // 265
+    Tcl_ValidateAllMemory: extern "C" fn(*const c_char, c_int), // 266
+    _deprecated_267: *const c_void, // 267
+    _deprecated_268: *const c_void, // 268
+    Tcl_HashStats: extern "C" fn(*mut c_void) -> *mut c_void, // 269
+    Tcl_ParseVar: extern "C" fn(*const Interpreter, *const c_char, *const c_void) -> *const c_char, // 270
+    _deprecated_271: *const c_void, // 271
+    Tcl_PkgPresentEx: extern "C" fn(
+        *const Interpreter,
+        *const c_char,
+        *const c_char,
+        c_int,
+        *mut c_void,
+    ) -> *const c_char, // 272
+    _deprecated_273: *const c_void, // 273
+    _deprecated_274: *const c_void, // 274
+    _deprecated_275: *const c_void, // 275
+    _deprecated_276: *const c_void, // 276
+    Tcl_WaitPid: extern "C" fn(*mut c_void, *mut c_void, c_int) -> *mut c_void, // 277
+    _deprecated_278: *const c_void, // 278
+    Tcl_GetVersion: extern "C" fn(*mut c_void, *mut c_void, *mut c_void, *mut c_void), // 279
+    Tcl_InitMemory: extern "C" fn(*const Interpreter), // 280
+    Tcl_StackChannel: extern "C" fn(
+        *const Interpreter,
         *const c_void,
-    ) -> *const c_void, // 96
-    _untranslated_function97: *const c_void, // 97
-    _untranslated_function98: *const c_void, // 98
-    _untranslated_function99: *const c_void, // 99
-    _untranslated_function100: *const c_void, // 100
-    _untranslated_function101: *const c_void, // 101
-    _untranslated_function102: *const c_void, // 102
-    delete_command: extern "C" fn(*const Interpreter, *const c_char) -> isize, // 103
-    _untranslated_function104: *const c_void, // 104
-    _untranslated_function105: *const c_void, // 105
-    _untranslated_function106: *const c_void, // 106
-    _untranslated_function107: *const c_void, // 107
-    _untranslated_function108: *const c_void, // 108
-    _untranslated_function109: *const c_void, // 109
-    _untranslated_function110: *const c_void, // 110
-    _untranslated_function111: *const c_void, // 111
-    _untranslated_function112: *const c_void, // 112
-    _untranslated_function113: *const c_void, // 113
-    _untranslated_function114: *const c_void, // 114
-    _untranslated_function115: *const c_void, // 115
-    _untranslated_function116: *const c_void, // 116
-    _untranslated_function117: *const c_void, // 117
-    _untranslated_function118: *const c_void, // 118
-    _untranslated_function119: *const c_void, // 119
-    _untranslated_function120: *const c_void, // 120
-    _untranslated_function121: *const c_void, // 121
-    _untranslated_function122: *const c_void, // 122
-    _untranslated_function123: *const c_void, // 123
-    _untranslated_function124: *const c_void, // 124
-    _untranslated_function125: *const c_void, // 125
-    _untranslated_function126: *const c_void, // 126
-    _untranslated_function127: *const c_void, // 127
-    _untranslated_function128: *const c_void, // 128
-    _untranslated_function129: *const c_void, // 129
-    _untranslated_function130: *const c_void, // 130
-    _untranslated_function131: *const c_void, // 131
-    _untranslated_function132: *const c_void, // 132
-    _untranslated_function133: *const c_void, // 133
-    _untranslated_function134: *const c_void, // 134
-    _untranslated_function135: *const c_void, // 135
-    _untranslated_function136: *const c_void, // 136
-    _untranslated_function137: *const c_void, // 137
-    _untranslated_function138: *const c_void, // 138
-    _untranslated_function139: *const c_void, // 139
-    _untranslated_function140: *const c_void, // 140
-    _untranslated_function141: *const c_void, // 141
-    _untranslated_function142: *const c_void, // 142
-    _untranslated_function143: *const c_void, // 143
-    _untranslated_function144: *const c_void, // 144
-    _untranslated_function145: *const c_void, // 145
-    _untranslated_function146: *const c_void, // 146
-    _untranslated_function147: *const c_void, // 147
-    _untranslated_function148: *const c_void, // 148
-    _untranslated_function149: *const c_void, // 149
-    _untranslated_function150: *const c_void, // 150
-    _untranslated_function151: *const c_void, // 151
-    _untranslated_function152: *const c_void, // 152
-    _untranslated_function153: *const c_void, // 153
-    _untranslated_function154: *const c_void, // 154
-    _untranslated_function155: *const c_void, // 155
-    _untranslated_function156: *const c_void, // 156
-    _untranslated_function157: *const c_void, // 157
-    _untranslated_function158: *const c_void, // 158
-    _untranslated_function159: *const c_void, // 159
-    _untranslated_function160: *const c_void, // 160
-    _untranslated_function161: *const c_void, // 161
-    _untranslated_function162: *const c_void, // 162
-    _untranslated_function163: *const c_void, // 163
-    _untranslated_function164: *const c_void, // 164
-    _untranslated_function165: *const c_void, // 165
-    get_obj_result: extern "C" fn(*const Interpreter) -> *mut RawObject, // 166
-    _untranslated_function167: *const c_void, // 167
-    _untranslated_function168: *const c_void, // 168
-    _untranslated_function169: *const c_void, // 169
-    _untranslated_function170: *const c_void, // 170
-    _untranslated_function171: *const c_void, // 171
-    _untranslated_function172: *const c_void, // 172
-    _untranslated_function173: *const c_void, // 173
-    _untranslated_function174: *const c_void, // 174
-    _untranslated_function175: *const c_void, // 175
-    _untranslated_function176: *const c_void, // 176
-    _untranslated_function177: *const c_void, // 177
-    _untranslated_function178: *const c_void, // 178
-    _untranslated_function179: *const c_void, // 179
-    _untranslated_function180: *const c_void, // 180
-    _untranslated_function181: *const c_void, // 181
-    _untranslated_function182: *const c_void, // 182
-    _untranslated_function183: *const c_void, // 183
-    _untranslated_function184: *const c_void, // 184
-    _untranslated_function185: *const c_void, // 185
-    _untranslated_function186: *const c_void, // 186
-    _untranslated_function187: *const c_void, // 187
-    _untranslated_function188: *const c_void, // 188
-    _untranslated_function189: *const c_void, // 189
-    _untranslated_function190: *const c_void, // 190
-    _untranslated_function191: *const c_void, // 191
-    _untranslated_function192: *const c_void, // 192
-    _untranslated_function193: *const c_void, // 193
-    _untranslated_function194: *const c_void, // 194
-    _untranslated_function195: *const c_void, // 195
-    _untranslated_function196: *const c_void, // 196
-    _untranslated_function197: *const c_void, // 197
-    _untranslated_function198: *const c_void, // 198
-    _untranslated_function199: *const c_void, // 199
-    _untranslated_function200: *const c_void, // 200
-    _untranslated_function201: *const c_void, // 201
-    _untranslated_function202: *const c_void, // 202
-    _untranslated_function203: *const c_void, // 203
-    _untranslated_function204: *const c_void, // 204
-    _untranslated_function205: *const c_void, // 205
-    _untranslated_function206: *const c_void, // 206
-    _untranslated_function207: *const c_void, // 207
-    _untranslated_function208: *const c_void, // 208
-    _untranslated_function209: *const c_void, // 209
-    _untranslated_function210: *const c_void, // 210
-    register_obj_type: extern "C" fn(*const ObjectType), // 211
-    _untranslated_function212: *const c_void, // 212
-    _untranslated_function213: *const c_void, // 213
-    _untranslated_function214: *const c_void, // 214
-    _untranslated_function215: *const c_void, // 215
-    _untranslated_function216: *const c_void, // 216
-    _untranslated_function217: *const c_void, // 217
-    _untranslated_function218: *const c_void, // 218
-    _untranslated_function219: *const c_void, // 219
-    _untranslated_function220: *const c_void, // 220
-    _untranslated_function221: *const c_void, // 221
-    _untranslated_function222: *const c_void, // 222
-    _untranslated_function223: *const c_void, // 223
-    _untranslated_function224: *const c_void, // 224
-    _untranslated_function225: *const c_void, // 225
-    _untranslated_function226: *const c_void, // 226
-    _untranslated_function227: *const c_void, // 227
-    _untranslated_function228: *const c_void, // 228
-    _untranslated_function229: *const c_void, // 229
-    _untranslated_function230: *const c_void, // 230
-    _untranslated_function231: *const c_void, // 231
-    set_result: extern "C" fn(*const Interpreter, *const c_char, *const c_void), // 232
-    _untranslated_function233: *const c_void, // 233
-    _untranslated_function234: *const c_void, // 234
-    set_obj_result: extern "C" fn(*const Interpreter, *mut RawObject), // 235
-    _untranslated_function236: *const c_void, // 236
-    _untranslated_function237: *const c_void, // 237
-    _untranslated_function238: *const c_void, // 238
-    _untranslated_function239: *const c_void, // 239
-    _untranslated_function240: *const c_void, // 240
-    _untranslated_function241: *const c_void, // 241
-    _untranslated_function242: *const c_void, // 242
-    _untranslated_function243: *const c_void, // 243
-    _untranslated_function244: *const c_void, // 244
-    _untranslated_function245: *const c_void, // 245
-    _untranslated_function246: *const c_void, // 246
-    _untranslated_function247: *const c_void, // 247
-    _untranslated_function248: *const c_void, // 248
-    _untranslated_function249: *const c_void, // 249
-    _untranslated_function250: *const c_void, // 250
-    _untranslated_function251: *const c_void, // 251
-    _untranslated_function252: *const c_void, // 252
-    _untranslated_function253: *const c_void, // 253
-    _untranslated_function254: *const c_void, // 254
-    _untranslated_function255: *const c_void, // 255
-    _untranslated_function256: *const c_void, // 256
-    _untranslated_function257: *const c_void, // 257
-    _untranslated_function258: *const c_void, // 258
-    _untranslated_function259: *const c_void, // 259
-    _untranslated_function260: *const c_void, // 260
-    _untranslated_function261: *const c_void, // 261
-    _untranslated_function262: *const c_void, // 262
-    _untranslated_function263: *const c_void, // 263
-    _untranslated_function264: *const c_void, // 264
-    _untranslated_function265: *const c_void, // 265
-    _untranslated_function266: *const c_void, // 266
-    _untranslated_function267: *const c_void, // 267
-    _untranslated_function268: *const c_void, // 268
-    _untranslated_function269: *const c_void, // 269
-    _untranslated_function270: *const c_void, // 270
-    _untranslated_function271: *const c_void, // 271
-    _untranslated_function272: *const c_void, // 272
-    _untranslated_function273: *const c_void, // 273
-    _untranslated_function274: *const c_void, // 274
-    _untranslated_function275: *const c_void, // 275
-    _untranslated_function276: *const c_void, // 276
-    _untranslated_function277: *const c_void, // 277
-    _untranslated_function278: *const c_void, // 278
-    _untranslated_function279: *const c_void, // 279
-    _untranslated_function280: *const c_void, // 280
-    _untranslated_function281: *const c_void, // 281
-    _untranslated_function282: *const c_void, // 282
-    _untranslated_function283: *const c_void, // 283
-    _untranslated_function284: *const c_void, // 284
-    _untranslated_function285: *const c_void, // 285
-    _untranslated_function286: *const c_void, // 286
-    _untranslated_function287: *const c_void, // 287
-    _untranslated_function288: *const c_void, // 288
-    _untranslated_function289: *const c_void, // 289
-    _untranslated_function290: *const c_void, // 290
-    eval_ex: extern "C" fn(*const Interpreter, *const c_char, usize, i32) -> TclStatus, // 291
-    _untranslated_function292: *const c_void, // 292
-    _untranslated_function293: *const c_void, // 293
-    _untranslated_function294: *const c_void, // 294
-    _untranslated_function295: *const c_void, // 295
-    _untranslated_function296: *const c_void, // 296
-    _untranslated_function297: *const c_void, // 297
-    _untranslated_function298: *const c_void, // 298
-    _untranslated_function299: *const c_void, // 299
-    _untranslated_function300: *const c_void, // 300
-    _untranslated_function301: *const c_void, // 301
-    _untranslated_function302: *const c_void, // 302
-    _untranslated_function303: *const c_void, // 303
-    _untranslated_function304: *const c_void, // 304
-    _untranslated_function305: *const c_void, // 305
-    _untranslated_function306: *const c_void, // 306
-    _untranslated_function307: *const c_void, // 307
-    _untranslated_function308: *const c_void, // 308
-    _untranslated_function309: *const c_void, // 309
-    _untranslated_function310: *const c_void, // 310
-    _untranslated_function311: *const c_void, // 311
-    _untranslated_function312: *const c_void, // 312
-    _untranslated_function313: *const c_void, // 313
-    _untranslated_function314: *const c_void, // 314
-    _untranslated_function315: *const c_void, // 315
-    _untranslated_function316: *const c_void, // 316
-    _untranslated_function317: *const c_void, // 317
-    _untranslated_function318: *const c_void, // 318
-    _untranslated_function319: *const c_void, // 319
-    _untranslated_function320: *const c_void, // 320
-    _untranslated_function321: *const c_void, // 321
-    _untranslated_function322: *const c_void, // 322
-    _untranslated_function323: *const c_void, // 323
-    _untranslated_function324: *const c_void, // 324
-    _untranslated_function325: *const c_void, // 325
-    _untranslated_function326: *const c_void, // 326
-    _untranslated_function327: *const c_void, // 327
-    _untranslated_function328: *const c_void, // 328
-    _untranslated_function329: *const c_void, // 329
-    _untranslated_function330: *const c_void, // 330
-    _untranslated_function331: *const c_void, // 331
-    _untranslated_function332: *const c_void, // 332
-    _untranslated_function333: *const c_void, // 333
-    _untranslated_function334: *const c_void, // 334
-    _untranslated_function335: *const c_void, // 335
-    _untranslated_function336: *const c_void, // 336
-    _untranslated_function337: *const c_void, // 337
-    _untranslated_function338: *const c_void, // 338
-    _untranslated_function339: *const c_void, // 339
-    get_string: extern "C" fn(*const RawObject) -> *const c_char, // 340
-    _untranslated_function341: *const c_void, // 341
-    _untranslated_function342: *const c_void, // 342
-    _untranslated_function343: *const c_void, // 343
-    _untranslated_function344: *const c_void, // 344
-    _untranslated_function345: *const c_void, // 345
-    _untranslated_function346: *const c_void, // 346
-    _untranslated_function347: *const c_void, // 347
-    _untranslated_function348: *const c_void, // 348
-    _untranslated_function349: *const c_void, // 349
-    _untranslated_function350: *const c_void, // 350
-    _untranslated_function351: *const c_void, // 351
-    _untranslated_function352: *const c_void, // 352
-    _untranslated_function353: *const c_void, // 353
-    _untranslated_function354: *const c_void, // 354
-    _untranslated_function355: *const c_void, // 355
-    _untranslated_function356: *const c_void, // 356
-    _untranslated_function357: *const c_void, // 357
-    _untranslated_function358: *const c_void, // 358
-    _untranslated_function359: *const c_void, // 359
-    _untranslated_function360: *const c_void, // 360
-    _untranslated_function361: *const c_void, // 361
-    _untranslated_function362: *const c_void, // 362
-    _untranslated_function363: *const c_void, // 363
-    _untranslated_function364: *const c_void, // 364
-    _untranslated_function365: *const c_void, // 365
-    _untranslated_function366: *const c_void, // 366
-    _untranslated_function367: *const c_void, // 367
-    _untranslated_function368: *const c_void, // 368
-    _untranslated_function369: *const c_void, // 369
-    _untranslated_function370: *const c_void, // 370
-    _untranslated_function371: *const c_void, // 371
-    _untranslated_function372: *const c_void, // 372
-    _untranslated_function373: *const c_void, // 373
-    _untranslated_function374: *const c_void, // 374
-    _untranslated_function375: *const c_void, // 375
-    _untranslated_function376: *const c_void, // 376
-    _untranslated_function377: *const c_void, // 377
-    _untranslated_function378: *const c_void, // 378
-    _untranslated_function379: *const c_void, // 379
-    _untranslated_function380: *const c_void, // 380
-    _untranslated_function381: *const c_void, // 381
-    _untranslated_function382: *const c_void, // 382
-    _untranslated_function383: *const c_void, // 383
-    _untranslated_function384: *const c_void, // 384
-    _untranslated_function385: *const c_void, // 385
-    _untranslated_function386: *const c_void, // 386
-    _untranslated_function387: *const c_void, // 387
-    _untranslated_function388: *const c_void, // 388
-    _untranslated_function389: *const c_void, // 389
-    _untranslated_function390: *const c_void, // 390
-    _untranslated_function391: *const c_void, // 391
-    _untranslated_function392: *const c_void, // 392
-    _untranslated_function393: *const c_void, // 393
-    _untranslated_function394: *const c_void, // 394
-    _untranslated_function395: *const c_void, // 395
-    _untranslated_function396: *const c_void, // 396
-    _untranslated_function397: *const c_void, // 397
-    _untranslated_function398: *const c_void, // 398
-    _untranslated_function399: *const c_void, // 399
-    _untranslated_function400: *const c_void, // 400
-    _untranslated_function401: *const c_void, // 401
-    _untranslated_function402: *const c_void, // 402
-    _untranslated_function403: *const c_void, // 403
-    _untranslated_function404: *const c_void, // 404
-    _untranslated_function405: *const c_void, // 405
-    _untranslated_function406: *const c_void, // 406
-    _untranslated_function407: *const c_void, // 407
-    _untranslated_function408: *const c_void, // 408
-    _untranslated_function409: *const c_void, // 409
-    _untranslated_function410: *const c_void, // 410
-    _untranslated_function411: *const c_void, // 411
-    _untranslated_function412: *const c_void, // 412
-    _untranslated_function413: *const c_void, // 413
-    _untranslated_function414: *const c_void, // 414
-    _untranslated_function415: *const c_void, // 415
-    _untranslated_function416: *const c_void, // 416
-    _untranslated_function417: *const c_void, // 417
-    _untranslated_function418: *const c_void, // 418
-    _untranslated_function419: *const c_void, // 419
-    _untranslated_function420: *const c_void, // 420
-    _untranslated_function421: *const c_void, // 421
-    _untranslated_function422: *const c_void, // 422
-    _untranslated_function423: *const c_void, // 423
-    _untranslated_function424: *const c_void, // 424
-    _untranslated_function425: *const c_void, // 425
-    _untranslated_function426: *const c_void, // 426
-    _untranslated_function427: *const c_void, // 427
-    attempt_alloc: extern "C" fn(usize) -> *mut u8, // 428
-    _untranslated_function429: *const c_void, // 429
-    attempt_realloc: extern "C" fn(*mut u8, usize) -> *mut u8, // 430
-    _untranslated_function431: *const c_void, // 431
-    _untranslated_function432: *const c_void, // 432
-    _untranslated_function433: *const c_void, // 433
-    _untranslated_function434: *const c_void, // 434
-    _untranslated_function435: *const c_void, // 435
-    _untranslated_function436: *const c_void, // 436
-    _untranslated_function437: *const c_void, // 437
-    _untranslated_function438: *const c_void, // 438
-    _untranslated_function439: *const c_void, // 439
-    _untranslated_function440: *const c_void, // 440
-    _untranslated_function441: *const c_void, // 441
-    _untranslated_function442: *const c_void, // 442
-    _untranslated_function443: *const c_void, // 443
-    _untranslated_function444: *const c_void, // 444
-    _untranslated_function445: *const c_void, // 445
-    _untranslated_function446: *const c_void, // 446
-    _untranslated_function447: *const c_void, // 447
-    _untranslated_function448: *const c_void, // 448
-    _untranslated_function449: *const c_void, // 449
-    _untranslated_function450: *const c_void, // 450
-    _untranslated_function451: *const c_void, // 451
-    _untranslated_function452: *const c_void, // 452
-    _untranslated_function453: *const c_void, // 453
-    _untranslated_function454: *const c_void, // 454
-    _untranslated_function455: *const c_void, // 455
-    _untranslated_function456: *const c_void, // 456
-    _untranslated_function457: *const c_void, // 457
-    _untranslated_function458: *const c_void, // 458
-    _untranslated_function459: *const c_void, // 459
-    _untranslated_function460: *const c_void, // 460
-    _untranslated_function461: *const c_void, // 461
-    _untranslated_function462: *const c_void, // 462
-    _untranslated_function463: *const c_void, // 463
-    _untranslated_function464: *const c_void, // 464
-    _untranslated_function465: *const c_void, // 465
-    _untranslated_function466: *const c_void, // 466
-    _untranslated_function467: *const c_void, // 467
-    _untranslated_function468: *const c_void, // 468
-    _untranslated_function469: *const c_void, // 469
-    _untranslated_function470: *const c_void, // 470
-    _untranslated_function471: *const c_void, // 471
-    _untranslated_function472: *const c_void, // 472
-    _untranslated_function473: *const c_void, // 473
-    _untranslated_function474: *const c_void, // 474
-    _untranslated_function475: *const c_void, // 475
-    _untranslated_function476: *const c_void, // 476
-    _untranslated_function477: *const c_void, // 477
-    _untranslated_function478: *const c_void, // 478
-    _untranslated_function479: *const c_void, // 479
-    _untranslated_function480: *const c_void, // 480
-    _untranslated_function481: *const c_void, // 481
-    _untranslated_function482: *const c_void, // 482
-    _untranslated_function483: *const c_void, // 483
-    _untranslated_function484: *const c_void, // 484
-    _untranslated_function485: *const c_void, // 485
-    _untranslated_function486: *const c_void, // 486
-    _untranslated_function487: *const c_void, // 487
-    _untranslated_function488: *const c_void, // 488
-    _untranslated_function489: *const c_void, // 489
-    _untranslated_function490: *const c_void, // 490
-    _untranslated_function491: *const c_void, // 491
-    _untranslated_function492: *const c_void, // 492
-    _untranslated_function493: *const c_void, // 493
-    _untranslated_function494: *const c_void, // 494
-    _untranslated_function495: *const c_void, // 495
-    _untranslated_function496: *const c_void, // 496
-    _untranslated_function497: *const c_void, // 497
-    _untranslated_function498: *const c_void, // 498
-    _untranslated_function499: *const c_void, // 499
-    _untranslated_function500: *const c_void, // 500
-    _untranslated_function501: *const c_void, // 501
-    _untranslated_function502: *const c_void, // 502
-    _untranslated_function503: *const c_void, // 503
-    _untranslated_function504: *const c_void, // 504
-    _untranslated_function505: *const c_void, // 505
-    _untranslated_function506: *const c_void, // 506
-    _untranslated_function507: *const c_void, // 507
-    _untranslated_function508: *const c_void, // 508
-    _untranslated_function509: *const c_void, // 509
-    _untranslated_function510: *const c_void, // 510
-    _untranslated_function511: *const c_void, // 511
-    _untranslated_function512: *const c_void, // 512
-    _untranslated_function513: *const c_void, // 513
-    _untranslated_function514: *const c_void, // 514
-    _untranslated_function515: *const c_void, // 515
-    _untranslated_function516: *const c_void, // 516
-    _untranslated_function517: *const c_void, // 517
-    _untranslated_function518: *const c_void, // 518
-    _untranslated_function519: *const c_void, // 519
-    _untranslated_function520: *const c_void, // 520
-    _untranslated_function521: *const c_void, // 521
-    _untranslated_function522: *const c_void, // 522
-    _untranslated_function523: *const c_void, // 523
-    _untranslated_function524: *const c_void, // 524
-    _untranslated_function525: *const c_void, // 525
-    _untranslated_function526: *const c_void, // 526
-    _untranslated_function527: *const c_void, // 527
-    _untranslated_function528: *const c_void, // 528
-    _untranslated_function529: *const c_void, // 529
-    _untranslated_function530: *const c_void, // 530
-    _untranslated_function531: *const c_void, // 531
-    _untranslated_function532: *const c_void, // 532
-    _untranslated_function533: *const c_void, // 533
-    _untranslated_function534: *const c_void, // 534
-    _untranslated_function535: *const c_void, // 535
-    _untranslated_function536: *const c_void, // 536
-    _untranslated_function537: *const c_void, // 537
-    _untranslated_function538: *const c_void, // 538
-    _untranslated_function539: *const c_void, // 539
-    _untranslated_function540: *const c_void, // 540
-    _untranslated_function541: *const c_void, // 541
-    _untranslated_function542: *const c_void, // 542
-    _untranslated_function543: *const c_void, // 543
-    _untranslated_function544: *const c_void, // 544
-    _untranslated_function545: *const c_void, // 545
-    _untranslated_function546: *const c_void, // 546
-    _untranslated_function547: *const c_void, // 547
-    _untranslated_function548: *const c_void, // 548
-    _untranslated_function549: *const c_void, // 549
-    _untranslated_function550: *const c_void, // 550
-    _untranslated_function551: *const c_void, // 551
-    _untranslated_function552: *const c_void, // 552
-    _untranslated_function553: *const c_void, // 553
-    _untranslated_function554: *const c_void, // 554
-    _untranslated_function555: *const c_void, // 555
-    _untranslated_function556: *const c_void, // 556
-    _untranslated_function557: *const c_void, // 557
-    _untranslated_function558: *const c_void, // 558
-    _untranslated_function559: *const c_void, // 559
-    _untranslated_function560: *const c_void, // 560
-    _untranslated_function561: *const c_void, // 561
-    _untranslated_function562: *const c_void, // 562
-    _untranslated_function563: *const c_void, // 563
-    _untranslated_function564: *const c_void, // 564
-    _untranslated_function565: *const c_void, // 565
-    _untranslated_function566: *const c_void, // 566
-    _untranslated_function567: *const c_void, // 567
-    _untranslated_function568: *const c_void, // 568
-    _untranslated_function569: *const c_void, // 569
-    _untranslated_function570: *const c_void, // 570
-    _untranslated_function571: *const c_void, // 571
-    _untranslated_function572: *const c_void, // 572
-    _untranslated_function573: *const c_void, // 573
-    _untranslated_function574: *const c_void, // 574
-    _untranslated_function575: *const c_void, // 575
-    _untranslated_function576: *const c_void, // 576
-    _untranslated_function577: *const c_void, // 577
-    _untranslated_function578: *const c_void, // 578
-    _untranslated_function579: *const c_void, // 579
-    _untranslated_function580: *const c_void, // 580
-    _untranslated_function581: *const c_void, // 581
-    _untranslated_function582: *const c_void, // 582
-    _untranslated_function583: *const c_void, // 583
-    _untranslated_function584: *const c_void, // 584
-    _untranslated_function585: *const c_void, // 585
-    _untranslated_function586: *const c_void, // 586
-    _untranslated_function587: *const c_void, // 587
-    _untranslated_function588: *const c_void, // 588
-    _untranslated_function589: *const c_void, // 589
-    _untranslated_function590: *const c_void, // 590
-    _untranslated_function591: *const c_void, // 591
-    _untranslated_function592: *const c_void, // 592
-    _untranslated_function593: *const c_void, // 593
-    _untranslated_function594: *const c_void, // 594
-    _untranslated_function595: *const c_void, // 595
-    _untranslated_function596: *const c_void, // 596
-    _untranslated_function597: *const c_void, // 597
-    _untranslated_function598: *const c_void, // 598
-    _untranslated_function599: *const c_void, // 599
-    _untranslated_function600: *const c_void, // 600
-    _untranslated_function601: *const c_void, // 601
-    _untranslated_function602: *const c_void, // 602
-    _untranslated_function603: *const c_void, // 603
-    _untranslated_function604: *const c_void, // 604
-    _untranslated_function605: *const c_void, // 605
-    _untranslated_function606: *const c_void, // 606
-    _untranslated_function607: *const c_void, // 607
-    _untranslated_function608: *const c_void, // 608
-    _untranslated_function609: *const c_void, // 609
-    _untranslated_function610: *const c_void, // 610
-    _untranslated_function611: *const c_void, // 611
-    _untranslated_function612: *const c_void, // 612
-    _untranslated_function613: *const c_void, // 613
-    _untranslated_function614: *const c_void, // 614
-    _untranslated_function615: *const c_void, // 615
-    _untranslated_function616: *const c_void, // 616
-    _untranslated_function617: *const c_void, // 617
-    _untranslated_function618: *const c_void, // 618
-    _untranslated_function619: *const c_void, // 619
-    _untranslated_function620: *const c_void, // 620
-    _untranslated_function621: *const c_void, // 621
-    _untranslated_function622: *const c_void, // 622
-    _untranslated_function623: *const c_void, // 623
-    _untranslated_function624: *const c_void, // 624
-    _untranslated_function625: *const c_void, // 625
-    _untranslated_function626: *const c_void, // 626
-    _untranslated_function627: *const c_void, // 627
-    _untranslated_function628: *const c_void, // 628
-    _untranslated_function629: *const c_void, // 629
-    _untranslated_function630: *const c_void, // 630
-    _untranslated_function631: *const c_void, // 631
-    _untranslated_function632: *const c_void, // 632
-    _untranslated_function633: *const c_void, // 633
-    _untranslated_function634: *const c_void, // 634
-    _untranslated_function635: *const c_void, // 635
-    _untranslated_function636: *const c_void, // 636
-    _untranslated_function637: *const c_void, // 637
-    _untranslated_function638: *const c_void, // 638
-    _untranslated_function639: *const c_void, // 639
-    _untranslated_function640: *const c_void, // 640
-    incr_ref_count: Option<extern "C" fn(*mut RawObject)>, // 641
-    decr_ref_count: Option<extern "C" fn(*mut RawObject)>, // 642
-    is_shared: Option<extern "C" fn(*const RawObject) -> isize>, // 643
-    _untranslated_function644: *const c_void, // 644
-    _untranslated_function645: *const c_void, // 645
-    _untranslated_function646: *const c_void, // 646
-    _untranslated_function647: *const c_void, // 647
-    _untranslated_function648: *const c_void, // 648
-    _untranslated_function649: *const c_void, // 649
+        *mut c_void,
+        c_int,
+        *mut c_void,
+    ) -> *mut c_void, // 281
+    Tcl_UnstackChannel: extern "C" fn(*const Interpreter, *mut c_void) -> c_int, // 282
+    Tcl_GetStackedChannel: extern "C" fn(*mut c_void) -> *mut c_void, // 283
+    Tcl_SetMainLoop: extern "C" fn(*mut c_void), // 284
+    Tcl_GetAliasObj: extern "C" fn(
+        *const Interpreter,
+        *const c_char,
+        *mut c_void,
+        *const c_void,
+        *mut c_void,
+        *mut c_void,
+    ) -> c_int, // 285
+    Tcl_AppendObjToObj: extern "C" fn(*mut RawObject, *mut RawObject), // 286
+    Tcl_CreateEncoding: extern "C" fn(*const c_void) -> *mut c_void, // 287
+    Tcl_CreateThreadExitHandler: extern "C" fn(*mut c_void, *mut c_void), // 288
+    Tcl_DeleteThreadExitHandler: extern "C" fn(*mut c_void, *mut c_void), // 289
+    _deprecated_290: *const c_void, // 290
+    Tcl_EvalEx: extern "C" fn(*const Interpreter, *const c_char, usize, c_int) -> c_int, // 291
+    Tcl_EvalObjv: extern "C" fn(*const Interpreter, usize, *mut c_void, c_int) -> c_int, // 292
+    Tcl_EvalObjEx: extern "C" fn(*const Interpreter, *mut RawObject, c_int) -> c_int, // 293
+    Tcl_ExitThread: extern "C" fn(c_int), // 294
+    Tcl_ExternalToUtf: extern "C" fn(
+        *const Interpreter,
+        *mut c_void,
+        *const c_char,
+        usize,
+        c_int,
+        *mut c_void,
+        *mut c_void,
+        usize,
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+    ) -> c_int, // 295
+    Tcl_ExternalToUtfDString:
+        extern "C" fn(*mut c_void, *const c_char, usize, *mut c_void) -> *mut c_void, // 296
+    Tcl_FinalizeThread: extern "C" fn(), // 297
+    Tcl_FinalizeNotifier: extern "C" fn(*mut c_void), // 298
+    Tcl_FreeEncoding: extern "C" fn(*mut c_void), // 299
+    Tcl_GetCurrentThread: extern "C" fn() -> *mut c_void, // 300
+    Tcl_GetEncoding: extern "C" fn(*const Interpreter, *const c_char) -> *mut c_void, // 301
+    Tcl_GetEncodingName: extern "C" fn(*mut c_void) -> *const c_char, // 302
+    Tcl_GetEncodingNames: extern "C" fn(*const Interpreter), // 303
+    Tcl_GetIndexFromObjStruct: extern "C" fn(
+        *const Interpreter,
+        *mut RawObject,
+        *const c_void,
+        usize,
+        *const c_char,
+        c_int,
+        *mut c_void,
+    ) -> c_int, // 304
+    Tcl_GetThreadData: extern "C" fn(*mut c_void, usize) -> *mut c_void, // 305
+    Tcl_GetVar2Ex:
+        extern "C" fn(*const Interpreter, *const c_char, *const c_char, c_int) -> *mut RawObject, // 306
+    Tcl_InitNotifier: extern "C" fn() -> *mut c_void, // 307
+    Tcl_MutexLock: extern "C" fn(*mut c_void),        // 308
+    Tcl_MutexUnlock: extern "C" fn(*mut c_void),      // 309
+    Tcl_ConditionNotify: extern "C" fn(*mut c_void),  // 310
+    Tcl_ConditionWait: extern "C" fn(*mut c_void, *mut c_void, *const c_void), // 311
+    TclNumUtfChars: extern "C" fn(*const c_char, usize) -> usize, // 312
+    Tcl_ReadChars: extern "C" fn(*mut c_void, *mut RawObject, usize, c_int) -> usize, // 313
+    _deprecated_314: *const c_void,                   // 314
+    _deprecated_315: *const c_void,                   // 315
+    Tcl_SetSystemEncoding: extern "C" fn(*const Interpreter, *const c_char) -> c_int, // 316
+    Tcl_SetVar2Ex: extern "C" fn(
+        *const Interpreter,
+        *const c_char,
+        *const c_char,
+        *mut RawObject,
+        c_int,
+    ) -> *mut RawObject, // 317
+    Tcl_ThreadAlert: extern "C" fn(*mut c_void),      // 318
+    Tcl_ThreadQueueEvent: extern "C" fn(*mut c_void, *mut c_void, c_int), // 319
+    Tcl_UniCharAtIndex: extern "C" fn(*const c_char, usize) -> c_int, // 320
+    Tcl_UniCharToLower: extern "C" fn(c_int) -> c_int, // 321
+    Tcl_UniCharToTitle: extern "C" fn(c_int) -> c_int, // 322
+    Tcl_UniCharToUpper: extern "C" fn(c_int) -> c_int, // 323
+    Tcl_UniCharToUtf: extern "C" fn(c_int, *mut c_void) -> usize, // 324
+    TclUtfAtIndex: extern "C" fn(*const c_char, usize) -> *const c_char, // 325
+    TclUtfCharComplete: extern "C" fn(*const c_char, usize) -> c_int, // 326
+    Tcl_UtfBackslash: extern "C" fn(*const c_char, *mut c_void, *mut c_void) -> usize, // 327
+    Tcl_UtfFindFirst: extern "C" fn(*const c_char, c_int) -> *const c_char, // 328
+    Tcl_UtfFindLast: extern "C" fn(*const c_char, c_int) -> *const c_char, // 329
+    TclUtfNext: extern "C" fn(*const c_char) -> *const c_char, // 330
+    TclUtfPrev: extern "C" fn(*const c_char, *const c_char) -> *const c_char, // 331
+    Tcl_UtfToExternal: extern "C" fn(
+        *const Interpreter,
+        *mut c_void,
+        *const c_char,
+        usize,
+        c_int,
+        *mut c_void,
+        *mut c_void,
+        usize,
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+    ) -> c_int, // 332
+    Tcl_UtfToExternalDString:
+        extern "C" fn(*mut c_void, *const c_char, usize, *mut c_void) -> *mut c_void, // 333
+    Tcl_UtfToLower: extern "C" fn(*mut c_void) -> usize, // 334
+    Tcl_UtfToTitle: extern "C" fn(*mut c_void) -> usize, // 335
+    Tcl_UtfToChar16: extern "C" fn(*const c_char, *mut c_void) -> usize, // 336
+    Tcl_UtfToUpper: extern "C" fn(*mut c_void) -> usize, // 337
+    Tcl_WriteChars: extern "C" fn(*mut c_void, *const c_char, usize) -> usize, // 338
+    Tcl_WriteObj: extern "C" fn(*mut c_void, *mut RawObject) -> usize, // 339
+    Tcl_GetString: extern "C" fn(*mut RawObject) -> *mut c_char, // 340
+    _deprecated_341: *const c_void,                   // 341
+    _deprecated_342: *const c_void,                   // 342
+    Tcl_AlertNotifier: extern "C" fn(*mut c_void),    // 343
+    Tcl_ServiceModeHook: extern "C" fn(c_int),        // 344
+    Tcl_UniCharIsAlnum: extern "C" fn(c_int) -> c_int, // 345
+    Tcl_UniCharIsAlpha: extern "C" fn(c_int) -> c_int, // 346
+    Tcl_UniCharIsDigit: extern "C" fn(c_int) -> c_int, // 347
+    Tcl_UniCharIsLower: extern "C" fn(c_int) -> c_int, // 348
+    Tcl_UniCharIsSpace: extern "C" fn(c_int) -> c_int, // 349
+    Tcl_UniCharIsUpper: extern "C" fn(c_int) -> c_int, // 350
+    Tcl_UniCharIsWordChar: extern "C" fn(c_int) -> c_int, // 351
+    Tcl_Char16Len: extern "C" fn(*const c_void) -> usize, // 352
+    _deprecated_353: *const c_void,                   // 353
+    Tcl_Char16ToUtfDString: extern "C" fn(*const c_void, usize, *mut c_void) -> *mut c_void, // 354
+    Tcl_UtfToChar16DString: extern "C" fn(*const c_char, usize, *mut c_void) -> *mut c_void, // 355
+    Tcl_GetRegExpFromObj: extern "C" fn(*const Interpreter, *mut RawObject, c_int) -> *mut c_void, // 356
+    _deprecated_357: *const c_void,            // 357
+    Tcl_FreeParse: extern "C" fn(*mut c_void), // 358
+    Tcl_LogCommandInfo: extern "C" fn(*const Interpreter, *const c_char, *const c_char, usize), // 359
+    Tcl_ParseBraces: extern "C" fn(
+        *const Interpreter,
+        *const c_char,
+        usize,
+        *mut c_void,
+        c_int,
+        *const c_void,
+    ) -> c_int, // 360
+    Tcl_ParseCommand:
+        extern "C" fn(*const Interpreter, *const c_char, usize, c_int, *mut c_void) -> c_int, // 361
+    Tcl_ParseExpr: extern "C" fn(*const Interpreter, *const c_char, usize, *mut c_void) -> c_int, // 362
+    Tcl_ParseQuotedString: extern "C" fn(
+        *const Interpreter,
+        *const c_char,
+        usize,
+        *mut c_void,
+        c_int,
+        *const c_void,
+    ) -> c_int, // 363
+    Tcl_ParseVarName:
+        extern "C" fn(*const Interpreter, *const c_char, usize, *mut c_void, c_int) -> c_int, // 364
+    Tcl_GetCwd: extern "C" fn(*const Interpreter, *mut c_void) -> *mut c_void, // 365
+    Tcl_Chdir: extern "C" fn(*const c_char) -> c_int,                          // 366
+    Tcl_Access: extern "C" fn(*const c_char, c_int) -> c_int,                  // 367
+    Tcl_Stat: extern "C" fn(*const c_char, *mut c_void) -> c_int,              // 368
+    TclUtfNcmp: extern "C" fn(*const c_char, *const c_char, *mut c_void) -> c_int, // 369
+    TclUtfNcasecmp: extern "C" fn(*const c_char, *const c_char, *mut c_void) -> c_int, // 370
+    Tcl_StringCaseMatch: extern "C" fn(*const c_char, *const c_char, c_int) -> c_int, // 371
+    Tcl_UniCharIsControl: extern "C" fn(c_int) -> c_int,                       // 372
+    Tcl_UniCharIsGraph: extern "C" fn(c_int) -> c_int,                         // 373
+    Tcl_UniCharIsPrint: extern "C" fn(c_int) -> c_int,                         // 374
+    Tcl_UniCharIsPunct: extern "C" fn(c_int) -> c_int,                         // 375
+    Tcl_RegExpExecObj: extern "C" fn(
+        *const Interpreter,
+        *mut c_void,
+        *mut RawObject,
+        usize,
+        usize,
+        c_int,
+    ) -> c_int, // 376
+    Tcl_RegExpGetInfo: extern "C" fn(*mut c_void, *mut c_void),                // 377
+    Tcl_NewUnicodeObj: extern "C" fn(*const c_void, usize) -> *mut RawObject,  // 378
+    Tcl_SetUnicodeObj: extern "C" fn(*mut RawObject, *const c_void, usize),    // 379
+    TclGetCharLength: extern "C" fn(*mut RawObject) -> usize,                  // 380
+    TclGetUniChar: extern "C" fn(*mut RawObject, usize) -> c_int,              // 381
+    _deprecated_382: *const c_void,                                            // 382
+    TclGetRange: extern "C" fn(*mut RawObject, usize, usize) -> *mut RawObject, // 383
+    Tcl_AppendUnicodeToObj: extern "C" fn(*mut RawObject, *const c_void, usize), // 384
+    Tcl_RegExpMatchObj: extern "C" fn(*const Interpreter, *mut RawObject, *mut RawObject) -> c_int, // 385
+    Tcl_SetNotifier: extern "C" fn(*const c_void), // 386
+    Tcl_GetAllocMutex: extern "C" fn() -> *mut c_void, // 387
+    Tcl_GetChannelNames: extern "C" fn(*const Interpreter) -> c_int, // 388
+    Tcl_GetChannelNamesEx: extern "C" fn(*const Interpreter, *const c_char) -> c_int, // 389
+    Tcl_ProcObjCmd: extern "C" fn(*mut c_void, *const Interpreter, usize, *mut c_void) -> c_int, // 390
+    Tcl_ConditionFinalize: extern "C" fn(*mut c_void), // 391
+    Tcl_MutexFinalize: extern "C" fn(*mut c_void),     // 392
+    Tcl_CreateThread: extern "C" fn(*mut c_void, *mut c_void, *mut c_void, usize, c_int) -> c_int, // 393
+    Tcl_ReadRaw: extern "C" fn(*mut c_void, *mut c_void, usize) -> usize, // 394
+    Tcl_WriteRaw: extern "C" fn(*mut c_void, *const c_char, usize) -> usize, // 395
+    Tcl_GetTopChannel: extern "C" fn(*mut c_void) -> *mut c_void,         // 396
+    Tcl_ChannelBuffered: extern "C" fn(*mut c_void) -> c_int,             // 397
+    Tcl_ChannelName: extern "C" fn(*const c_void) -> *const c_char,       // 398
+    Tcl_ChannelVersion: extern "C" fn(*const c_void) -> *mut c_void,      // 399
+    Tcl_ChannelBlockModeProc: extern "C" fn(*const c_void) -> *mut c_void, // 400
+    _deprecated_401: *const c_void,                                       // 401
+    Tcl_ChannelClose2Proc: extern "C" fn(*const c_void) -> *mut c_void,   // 402
+    Tcl_ChannelInputProc: extern "C" fn(*const c_void) -> *mut c_void,    // 403
+    Tcl_ChannelOutputProc: extern "C" fn(*const c_void) -> *mut c_void,   // 404
+    _deprecated_405: *const c_void,                                       // 405
+    Tcl_ChannelSetOptionProc: extern "C" fn(*const c_void) -> *mut c_void, // 406
+    Tcl_ChannelGetOptionProc: extern "C" fn(*const c_void) -> *mut c_void, // 407
+    Tcl_ChannelWatchProc: extern "C" fn(*const c_void) -> *mut c_void,    // 408
+    Tcl_ChannelGetHandleProc: extern "C" fn(*const c_void) -> *mut c_void, // 409
+    Tcl_ChannelFlushProc: extern "C" fn(*const c_void) -> *mut c_void,    // 410
+    Tcl_ChannelHandlerProc: extern "C" fn(*const c_void) -> *mut c_void,  // 411
+    Tcl_JoinThread: extern "C" fn(*mut c_void, *mut c_void) -> c_int,     // 412
+    Tcl_IsChannelShared: extern "C" fn(*mut c_void) -> c_int,             // 413
+    Tcl_IsChannelRegistered: extern "C" fn(*const Interpreter, *mut c_void) -> c_int, // 414
+    Tcl_CutChannel: extern "C" fn(*mut c_void),                           // 415
+    Tcl_SpliceChannel: extern "C" fn(*mut c_void),                        // 416
+    Tcl_ClearChannelHandlers: extern "C" fn(*mut c_void),                 // 417
+    Tcl_IsChannelExisting: extern "C" fn(*const c_char) -> c_int,         // 418
+    _deprecated_419: *const c_void,                                       // 419
+    _deprecated_420: *const c_void,                                       // 420
+    _deprecated_421: *const c_void,                                       // 421
+    _deprecated_422: *const c_void,                                       // 422
+    Tcl_InitCustomHashTable: extern "C" fn(*mut c_void, c_int, *const c_void), // 423
+    Tcl_InitObjHashTable: extern "C" fn(*mut c_void),                     // 424
+    Tcl_CommandTraceInfo: extern "C" fn(
+        *const Interpreter,
+        *const c_char,
+        c_int,
+        *mut c_void,
+        *mut c_void,
+    ) -> *mut c_void, // 425
+    Tcl_TraceCommand:
+        extern "C" fn(*const Interpreter, *const c_char, c_int, *mut c_void, *mut c_void) -> c_int, // 426
+    Tcl_UntraceCommand:
+        extern "C" fn(*const Interpreter, *const c_char, c_int, *mut c_void, *mut c_void), // 427
+    Tcl_AttemptAlloc: extern "C" fn(usize) -> *mut c_void, // 428
+    Tcl_AttemptDbCkalloc: extern "C" fn(usize, *const c_char, c_int) -> *mut c_void, // 429
+    Tcl_AttemptRealloc: extern "C" fn(*mut c_void, usize) -> *mut c_void, // 430
+    Tcl_AttemptDbCkrealloc: extern "C" fn(*mut c_void, usize, *const c_char, c_int) -> *mut c_void, // 431
+    Tcl_AttemptSetObjLength: extern "C" fn(*mut RawObject, usize) -> c_int, // 432
+    Tcl_GetChannelThread: extern "C" fn(*mut c_void) -> *mut c_void,        // 433
+    TclGetUnicodeFromObj: extern "C" fn(*mut RawObject, *mut c_void) -> *mut c_void, // 434
+    _deprecated_435: *const c_void,                                         // 435
+    _deprecated_436: *const c_void,                                         // 436
+    Tcl_SubstObj: extern "C" fn(*const Interpreter, *mut RawObject, c_int) -> *mut RawObject, // 437
+    Tcl_DetachChannel: extern "C" fn(*const Interpreter, *mut c_void) -> c_int, // 438
+    Tcl_IsStandardChannel: extern "C" fn(*mut c_void) -> c_int,             // 439
+    Tcl_FSCopyFile: extern "C" fn(*mut RawObject, *mut RawObject) -> c_int, // 440
+    Tcl_FSCopyDirectory: extern "C" fn(*mut RawObject, *mut RawObject, *mut c_void) -> c_int, // 441
+    Tcl_FSCreateDirectory: extern "C" fn(*mut RawObject) -> c_int,          // 442
+    Tcl_FSDeleteFile: extern "C" fn(*mut RawObject) -> c_int,               // 443
+    Tcl_FSLoadFile: extern "C" fn(
+        *const Interpreter,
+        *mut RawObject,
+        *const c_char,
+        *const c_char,
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+    ) -> c_int, // 444
+    Tcl_FSMatchInDirectory: extern "C" fn(
+        *const Interpreter,
+        *mut RawObject,
+        *mut RawObject,
+        *const c_char,
+        *mut c_void,
+    ) -> c_int, // 445
+    Tcl_FSLink: extern "C" fn(*mut RawObject, *mut RawObject, c_int) -> *mut RawObject, // 446
+    Tcl_FSRemoveDirectory: extern "C" fn(*mut RawObject, c_int, *mut c_void) -> c_int, // 447
+    Tcl_FSRenameFile: extern "C" fn(*mut RawObject, *mut RawObject) -> c_int, // 448
+    Tcl_FSLstat: extern "C" fn(*mut RawObject, *mut c_void) -> c_int,       // 449
+    Tcl_FSUtime: extern "C" fn(*mut RawObject, *mut c_void) -> c_int,       // 450
+    Tcl_FSFileAttrsGet:
+        extern "C" fn(*const Interpreter, c_int, *mut RawObject, *mut c_void) -> c_int, // 451
+    Tcl_FSFileAttrsSet:
+        extern "C" fn(*const Interpreter, c_int, *mut RawObject, *mut RawObject) -> c_int, // 452
+    Tcl_FSFileAttrStrings: extern "C" fn(*mut RawObject, *mut c_void) -> *const c_void, // 453
+    Tcl_FSStat: extern "C" fn(*mut RawObject, *mut c_void) -> c_int,        // 454
+    Tcl_FSAccess: extern "C" fn(*mut RawObject, c_int) -> c_int,            // 455
+    Tcl_FSOpenFileChannel:
+        extern "C" fn(*const Interpreter, *mut RawObject, *const c_char, c_int) -> *mut c_void, // 456
+    Tcl_FSGetCwd: extern "C" fn(*const Interpreter) -> *mut RawObject, // 457
+    Tcl_FSChdir: extern "C" fn(*mut RawObject) -> c_int,               // 458
+    Tcl_FSConvertToPathType: extern "C" fn(*const Interpreter, *mut RawObject) -> c_int, // 459
+    Tcl_FSJoinPath: extern "C" fn(*mut RawObject, usize) -> *mut RawObject, // 460
+    TclFSSplitPath: extern "C" fn(*mut RawObject, *mut c_void) -> *mut RawObject, // 461
+    Tcl_FSEqualPaths: extern "C" fn(*mut RawObject, *mut RawObject) -> c_int, // 462
+    Tcl_FSGetNormalizedPath: extern "C" fn(*const Interpreter, *mut RawObject) -> *mut RawObject, // 463
+    Tcl_FSJoinToPath: extern "C" fn(*mut RawObject, usize, *mut c_void) -> *mut RawObject, // 464
+    Tcl_FSGetInternalRep: extern "C" fn(*mut RawObject, *const c_void) -> *mut c_void,     // 465
+    Tcl_FSGetTranslatedPath: extern "C" fn(*const Interpreter, *mut RawObject) -> *mut RawObject, // 466
+    Tcl_FSEvalFile: extern "C" fn(*const Interpreter, *mut RawObject) -> c_int, // 467
+    Tcl_FSNewNativePath: extern "C" fn(*const c_void, *mut c_void) -> *mut RawObject, // 468
+    Tcl_FSGetNativePath: extern "C" fn(*mut RawObject) -> *const c_void,        // 469
+    Tcl_FSFileSystemInfo: extern "C" fn(*mut RawObject) -> *mut RawObject,      // 470
+    Tcl_FSPathSeparator: extern "C" fn(*mut RawObject) -> *mut RawObject,       // 471
+    Tcl_FSListVolumes: extern "C" fn() -> *mut RawObject,                       // 472
+    Tcl_FSRegister: extern "C" fn(*mut c_void, *const c_void) -> c_int,         // 473
+    Tcl_FSUnregister: extern "C" fn(*const c_void) -> c_int,                    // 474
+    Tcl_FSData: extern "C" fn(*const c_void) -> *mut c_void,                    // 475
+    Tcl_FSGetTranslatedStringPath:
+        extern "C" fn(*const Interpreter, *mut RawObject) -> *const c_char, // 476
+    Tcl_FSGetFileSystemForPath: extern "C" fn(*mut RawObject) -> *const c_void, // 477
+    Tcl_FSGetPathType: extern "C" fn(*mut RawObject) -> *mut c_void,            // 478
+    Tcl_OutputBuffered: extern "C" fn(*mut c_void) -> c_int,                    // 479
+    Tcl_FSMountsChanged: extern "C" fn(*const c_void),                          // 480
+    Tcl_EvalTokensStandard: extern "C" fn(*const Interpreter, *mut c_void, usize) -> c_int, // 481
+    Tcl_GetTime: extern "C" fn(*mut c_void),                                    // 482
+    Tcl_CreateObjTrace: extern "C" fn(
+        *const Interpreter,
+        usize,
+        c_int,
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+    ) -> *mut c_void, // 483
+    Tcl_GetCommandInfoFromToken: extern "C" fn(*mut c_void, *mut c_void) -> c_int, // 484
+    Tcl_SetCommandInfoFromToken: extern "C" fn(*mut c_void, *const c_void) -> c_int, // 485
+    Tcl_DbNewWideIntObj: extern "C" fn(*mut c_void, *const c_char, c_int) -> *mut RawObject, // 486
+    Tcl_GetWideIntFromObj: extern "C" fn(*const Interpreter, *mut RawObject, *mut c_void) -> c_int, // 487
+    Tcl_NewWideIntObj: extern "C" fn(*mut c_void) -> *mut RawObject, // 488
+    Tcl_SetWideIntObj: extern "C" fn(*mut RawObject, *mut c_void),   // 489
+    Tcl_AllocStatBuf: extern "C" fn() -> *mut c_void,                // 490
+    Tcl_Seek: extern "C" fn(*mut c_void, c_longlong, c_int) -> c_longlong, // 491
+    Tcl_Tell: extern "C" fn(*mut c_void) -> c_longlong,              // 492
+    Tcl_ChannelWideSeekProc: extern "C" fn(*const c_void) -> *mut c_void, // 493
+    Tcl_DictObjPut:
+        extern "C" fn(*const Interpreter, *mut RawObject, *mut RawObject, *mut RawObject) -> c_int, // 494
+    Tcl_DictObjGet:
+        extern "C" fn(*const Interpreter, *mut RawObject, *mut RawObject, *mut c_void) -> c_int, // 495
+    Tcl_DictObjRemove: extern "C" fn(*const Interpreter, *mut RawObject, *mut RawObject) -> c_int, // 496
+    TclDictObjSize: extern "C" fn(*const Interpreter, *mut RawObject, *mut c_void) -> c_int, // 497
+    Tcl_DictObjFirst: extern "C" fn(
+        *const Interpreter,
+        *mut RawObject,
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+    ) -> c_int, // 498
+    Tcl_DictObjNext: extern "C" fn(*mut c_void, *mut c_void, *mut c_void, *mut c_void),      // 499
+    Tcl_DictObjDone: extern "C" fn(*mut c_void),                                             // 500
+    Tcl_DictObjPutKeyList: extern "C" fn(
+        *const Interpreter,
+        *mut RawObject,
+        usize,
+        *mut c_void,
+        *mut RawObject,
+    ) -> c_int, // 501
+    Tcl_DictObjRemoveKeyList:
+        extern "C" fn(*const Interpreter, *mut RawObject, usize, *mut c_void) -> c_int, // 502
+    Tcl_NewDictObj: extern "C" fn() -> *mut RawObject,                                       // 503
+    Tcl_DbNewDictObj: extern "C" fn(*const c_char, c_int) -> *mut RawObject,                 // 504
+    Tcl_RegisterConfig:
+        extern "C" fn(*const Interpreter, *const c_char, *const c_void, *const c_char), // 505
+    Tcl_CreateNamespace:
+        extern "C" fn(*const Interpreter, *const c_char, *mut c_void, *mut c_void) -> *mut c_void, // 506
+    Tcl_DeleteNamespace: extern "C" fn(*mut c_void), // 507
+    Tcl_AppendExportList: extern "C" fn(*const Interpreter, *mut c_void, *mut RawObject) -> c_int, // 508
+    Tcl_Export: extern "C" fn(*const Interpreter, *mut c_void, *const c_char, c_int) -> c_int, // 509
+    Tcl_Import: extern "C" fn(*const Interpreter, *mut c_void, *const c_char, c_int) -> c_int, // 510
+    Tcl_ForgetImport: extern "C" fn(*const Interpreter, *mut c_void, *const c_char) -> c_int, // 511
+    Tcl_GetCurrentNamespace: extern "C" fn(*const Interpreter) -> *mut c_void,                // 512
+    Tcl_GetGlobalNamespace: extern "C" fn(*const Interpreter) -> *mut c_void,                 // 513
+    Tcl_FindNamespace:
+        extern "C" fn(*const Interpreter, *const c_char, *mut c_void, c_int) -> *mut c_void, // 514
+    Tcl_FindCommand:
+        extern "C" fn(*const Interpreter, *const c_char, *mut c_void, c_int) -> *mut c_void, // 515
+    Tcl_GetCommandFromObj: extern "C" fn(*const Interpreter, *mut RawObject) -> *mut c_void,  // 516
+    Tcl_GetCommandFullName: extern "C" fn(*const Interpreter, *mut c_void, *mut RawObject),   // 517
+    Tcl_FSEvalFileEx: extern "C" fn(*const Interpreter, *mut RawObject, *const c_char) -> c_int, // 518
+    _deprecated_519: *const c_void, // 519
+    Tcl_LimitAddHandler:
+        extern "C" fn(*const Interpreter, c_int, *mut c_void, *mut c_void, *mut c_void), // 520
+    Tcl_LimitRemoveHandler: extern "C" fn(*const Interpreter, c_int, *mut c_void, *mut c_void), // 521
+    Tcl_LimitReady: extern "C" fn(*const Interpreter) -> c_int, // 522
+    Tcl_LimitCheck: extern "C" fn(*const Interpreter) -> c_int, // 523
+    Tcl_LimitExceeded: extern "C" fn(*const Interpreter) -> c_int, // 524
+    Tcl_LimitSetCommands: extern "C" fn(*const Interpreter, usize), // 525
+    Tcl_LimitSetTime: extern "C" fn(*const Interpreter, *mut c_void), // 526
+    Tcl_LimitSetGranularity: extern "C" fn(*const Interpreter, c_int, c_int), // 527
+    Tcl_LimitTypeEnabled: extern "C" fn(*const Interpreter, c_int) -> c_int, // 528
+    Tcl_LimitTypeExceeded: extern "C" fn(*const Interpreter, c_int) -> c_int, // 529
+    Tcl_LimitTypeSet: extern "C" fn(*const Interpreter, c_int), // 530
+    Tcl_LimitTypeReset: extern "C" fn(*const Interpreter, c_int), // 531
+    Tcl_LimitGetCommands: extern "C" fn(*const Interpreter) -> c_int, // 532
+    Tcl_LimitGetTime: extern "C" fn(*const Interpreter, *mut c_void), // 533
+    Tcl_LimitGetGranularity: extern "C" fn(*const Interpreter, c_int) -> c_int, // 534
+    Tcl_SaveInterpState: extern "C" fn(*const Interpreter, c_int) -> *mut c_void, // 535
+    Tcl_RestoreInterpState: extern "C" fn(*const Interpreter, *mut c_void) -> c_int, // 536
+    Tcl_DiscardInterpState: extern "C" fn(*mut c_void),         // 537
+    Tcl_SetReturnOptions: extern "C" fn(*const Interpreter, *mut RawObject) -> c_int, // 538
+    Tcl_GetReturnOptions: extern "C" fn(*const Interpreter, c_int) -> *mut RawObject, // 539
+    Tcl_IsEnsemble: extern "C" fn(*mut c_void) -> c_int,        // 540
+    Tcl_CreateEnsemble:
+        extern "C" fn(*const Interpreter, *const c_char, *mut c_void, c_int) -> *mut c_void, // 541
+    Tcl_FindEnsemble: extern "C" fn(*const Interpreter, *mut RawObject, c_int) -> *mut c_void, // 542
+    Tcl_SetEnsembleSubcommandList:
+        extern "C" fn(*const Interpreter, *mut c_void, *mut RawObject) -> c_int, // 543
+    Tcl_SetEnsembleMappingDict:
+        extern "C" fn(*const Interpreter, *mut c_void, *mut RawObject) -> c_int, // 544
+    Tcl_SetEnsembleUnknownHandler:
+        extern "C" fn(*const Interpreter, *mut c_void, *mut RawObject) -> c_int, // 545
+    Tcl_SetEnsembleFlags: extern "C" fn(*const Interpreter, *mut c_void, c_int) -> c_int, // 546
+    Tcl_GetEnsembleSubcommandList:
+        extern "C" fn(*const Interpreter, *mut c_void, *mut c_void) -> c_int, // 547
+    Tcl_GetEnsembleMappingDict:
+        extern "C" fn(*const Interpreter, *mut c_void, *mut c_void) -> c_int, // 548
+    Tcl_GetEnsembleUnknownHandler:
+        extern "C" fn(*const Interpreter, *mut c_void, *mut c_void) -> c_int, // 549
+    Tcl_GetEnsembleFlags: extern "C" fn(*const Interpreter, *mut c_void, *mut c_void) -> c_int, // 550
+    Tcl_GetEnsembleNamespace: extern "C" fn(*const Interpreter, *mut c_void, *mut c_void) -> c_int, // 551
+    Tcl_SetTimeProc: extern "C" fn(*mut c_void, *mut c_void, *mut c_void), // 552
+    Tcl_QueryTimeProc: extern "C" fn(*mut c_void, *mut c_void, *mut c_void), // 553
+    Tcl_ChannelThreadActionProc: extern "C" fn(*const c_void) -> *mut c_void, // 554
+    Tcl_NewBignumObj: extern "C" fn(*mut c_void) -> *mut RawObject,        // 555
+    Tcl_DbNewBignumObj: extern "C" fn(*mut c_void, *const c_char, c_int) -> *mut RawObject, // 556
+    Tcl_SetBignumObj: extern "C" fn(*mut RawObject, *mut c_void),          // 557
+    Tcl_GetBignumFromObj: extern "C" fn(*const Interpreter, *mut RawObject, *mut c_void) -> c_int, // 558
+    Tcl_TakeBignumFromObj: extern "C" fn(*const Interpreter, *mut RawObject, *mut c_void) -> c_int, // 559
+    Tcl_TruncateChannel: extern "C" fn(*mut c_void, c_longlong) -> c_int, // 560
+    Tcl_ChannelTruncateProc: extern "C" fn(*const c_void) -> *mut c_void, // 561
+    Tcl_SetChannelErrorInterp: extern "C" fn(*const Interpreter, *mut RawObject), // 562
+    Tcl_GetChannelErrorInterp: extern "C" fn(*const Interpreter, *mut c_void), // 563
+    Tcl_SetChannelError: extern "C" fn(*mut c_void, *mut RawObject),      // 564
+    Tcl_GetChannelError: extern "C" fn(*mut c_void, *mut c_void),         // 565
+    Tcl_InitBignumFromDouble: extern "C" fn(*const Interpreter, c_double, *mut c_void) -> c_int, // 566
+    Tcl_GetNamespaceUnknownHandler:
+        extern "C" fn(*const Interpreter, *mut c_void) -> *mut RawObject, // 567
+    Tcl_SetNamespaceUnknownHandler:
+        extern "C" fn(*const Interpreter, *mut c_void, *mut RawObject) -> c_int, // 568
+    Tcl_GetEncodingFromObj: extern "C" fn(*const Interpreter, *mut RawObject, *mut c_void) -> c_int, // 569
+    Tcl_GetEncodingSearchPath: extern "C" fn() -> *mut RawObject, // 570
+    Tcl_SetEncodingSearchPath: extern "C" fn(*mut RawObject) -> c_int, // 571
+    Tcl_GetEncodingNameFromEnvironment: extern "C" fn(*mut c_void) -> *const c_char, // 572
+    Tcl_PkgRequireProc:
+        extern "C" fn(*const Interpreter, *const c_char, usize, *mut c_void, *mut c_void) -> c_int, // 573
+    Tcl_AppendObjToErrorInfo: extern "C" fn(*const Interpreter, *mut RawObject), // 574
+    Tcl_AppendLimitedToObj:
+        extern "C" fn(*mut RawObject, *const c_char, usize, usize, *const c_char), // 575
+    Tcl_Format:
+        extern "C" fn(*const Interpreter, *const c_char, usize, *mut c_void) -> *mut RawObject, // 576
+    Tcl_AppendFormatToObj: extern "C" fn(
+        *const Interpreter,
+        *mut RawObject,
+        *const c_char,
+        usize,
+        *mut c_void,
+    ) -> c_int, // 577
+    Tcl_ObjPrintf: extern "C" fn(*const c_char, *const c_char) -> *mut RawObject, // 578
+    Tcl_AppendPrintfToObj: extern "C" fn(*mut RawObject, *const c_char, *const c_char), // 579
+    Tcl_CancelEval: extern "C" fn(*const Interpreter, *mut RawObject, *mut c_void, c_int) -> c_int, // 580
+    Tcl_Canceled: extern "C" fn(*const Interpreter, c_int) -> c_int, // 581
+    Tcl_CreatePipe: extern "C" fn(*mut c_void, *mut c_void, *mut c_void, c_int) -> c_int, // 582
+    Tcl_NRCreateCommand: extern "C" fn(
+        *const Interpreter,
+        *const c_char,
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+    ) -> *mut c_void, // 583
+    Tcl_NREvalObj: extern "C" fn(*const Interpreter, *mut RawObject, c_int) -> c_int, // 584
+    Tcl_NREvalObjv: extern "C" fn(*const Interpreter, usize, *mut c_void, c_int) -> c_int, // 585
+    Tcl_NRCmdSwap:
+        extern "C" fn(*const Interpreter, *mut c_void, usize, *mut c_void, c_int) -> c_int, // 586
+    Tcl_NRAddCallback: extern "C" fn(
+        *const Interpreter,
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+    ), // 587
+    Tcl_NRCallObjProc:
+        extern "C" fn(*const Interpreter, *mut c_void, *mut c_void, usize, *mut c_void) -> c_int, // 588
+    Tcl_GetFSDeviceFromStat: extern "C" fn(*const c_void) -> *mut c_void, // 589
+    Tcl_GetFSInodeFromStat: extern "C" fn(*const c_void) -> *mut c_void,  // 590
+    Tcl_GetModeFromStat: extern "C" fn(*const c_void) -> *mut c_void,     // 591
+    Tcl_GetLinkCountFromStat: extern "C" fn(*const c_void) -> c_int,      // 592
+    Tcl_GetUserIdFromStat: extern "C" fn(*const c_void) -> c_int,         // 593
+    Tcl_GetGroupIdFromStat: extern "C" fn(*const c_void) -> c_int,        // 594
+    Tcl_GetDeviceTypeFromStat: extern "C" fn(*const c_void) -> c_int,     // 595
+    Tcl_GetAccessTimeFromStat: extern "C" fn(*const c_void) -> c_longlong, // 596
+    Tcl_GetModificationTimeFromStat: extern "C" fn(*const c_void) -> c_longlong, // 597
+    Tcl_GetChangeTimeFromStat: extern "C" fn(*const c_void) -> c_longlong, // 598
+    Tcl_GetSizeFromStat: extern "C" fn(*const c_void) -> c_ulonglong,     // 599
+    Tcl_GetBlocksFromStat: extern "C" fn(*const c_void) -> c_ulonglong,   // 600
+    Tcl_GetBlockSizeFromStat: extern "C" fn(*const c_void) -> *mut c_void, // 601
+    Tcl_SetEnsembleParameterList:
+        extern "C" fn(*const Interpreter, *mut c_void, *mut RawObject) -> c_int, // 602
+    Tcl_GetEnsembleParameterList:
+        extern "C" fn(*const Interpreter, *mut c_void, *mut c_void) -> c_int, // 603
+    TclParseArgsObjv: extern "C" fn(
+        *const Interpreter,
+        *const c_void,
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+    ) -> c_int, // 604
+    Tcl_GetErrorLine: extern "C" fn(*const Interpreter) -> c_int,         // 605
+    Tcl_SetErrorLine: extern "C" fn(*const Interpreter, c_int),           // 606
+    Tcl_TransferResult: extern "C" fn(*const Interpreter, c_int, *const Interpreter), // 607
+    Tcl_InterpActive: extern "C" fn(*const Interpreter) -> c_int,         // 608
+    Tcl_BackgroundException: extern "C" fn(*const Interpreter, c_int),    // 609
+    Tcl_ZlibDeflate:
+        extern "C" fn(*const Interpreter, c_int, *mut RawObject, c_int, *mut RawObject) -> c_int, // 610
+    Tcl_ZlibInflate:
+        extern "C" fn(*const Interpreter, c_int, *mut RawObject, usize, *mut RawObject) -> c_int, // 611
+    Tcl_ZlibCRC32: extern "C" fn(c_uint, *const c_void, usize) -> c_uint, // 612
+    Tcl_ZlibAdler32: extern "C" fn(c_uint, *const c_void, usize) -> c_uint, // 613
+    Tcl_ZlibStreamInit: extern "C" fn(
+        *const Interpreter,
+        c_int,
+        c_int,
+        c_int,
+        *mut RawObject,
+        *mut c_void,
+    ) -> c_int, // 614
+    Tcl_ZlibStreamGetCommandName: extern "C" fn(*mut c_void) -> *mut RawObject, // 615
+    Tcl_ZlibStreamEof: extern "C" fn(*mut c_void) -> c_int,               // 616
+    Tcl_ZlibStreamChecksum: extern "C" fn(*mut c_void) -> c_int,          // 617
+    Tcl_ZlibStreamPut: extern "C" fn(*mut c_void, *mut RawObject, c_int) -> c_int, // 618
+    Tcl_ZlibStreamGet: extern "C" fn(*mut c_void, *mut RawObject, usize) -> c_int, // 619
+    Tcl_ZlibStreamClose: extern "C" fn(*mut c_void) -> c_int,             // 620
+    Tcl_ZlibStreamReset: extern "C" fn(*mut c_void) -> c_int,             // 621
+    Tcl_SetStartupScript: extern "C" fn(*mut RawObject, *const c_char),   // 622
+    Tcl_GetStartupScript: extern "C" fn(*const c_void) -> *mut RawObject, // 623
+    Tcl_CloseEx: extern "C" fn(*const Interpreter, *mut c_void, c_int) -> c_int, // 624
+    Tcl_NRExprObj: extern "C" fn(*const Interpreter, *mut RawObject, *mut RawObject) -> c_int, // 625
+    Tcl_NRSubstObj: extern "C" fn(*const Interpreter, *mut RawObject, c_int) -> c_int, // 626
+    Tcl_LoadFile: extern "C" fn(
+        *const Interpreter,
+        *mut RawObject,
+        *mut c_void,
+        c_int,
+        *mut c_void,
+        *mut c_void,
+    ) -> c_int, // 627
+    Tcl_FindSymbol: extern "C" fn(*const Interpreter, *mut c_void, *const c_char) -> *mut c_void, // 628
+    Tcl_FSUnloadFile: extern "C" fn(*const Interpreter, *mut c_void) -> c_int, // 629
+    Tcl_ZlibStreamSetCompressionDictionary: extern "C" fn(*mut c_void, *mut RawObject), // 630
+    Tcl_OpenTcpServerEx: extern "C" fn(
+        *const Interpreter,
+        *const c_char,
+        *const c_char,
+        c_uint,
+        c_int,
+        *mut c_void,
+        *mut c_void,
+    ) -> *mut c_void, // 631
+    TclZipfs_Mount:
+        extern "C" fn(*const Interpreter, *const c_char, *const c_char, *const c_char) -> c_int, // 632
+    TclZipfs_Unmount: extern "C" fn(*const Interpreter, *const c_char) -> c_int, // 633
+    TclZipfs_TclLibrary: extern "C" fn() -> *mut RawObject,                      // 634
+    TclZipfs_MountBuffer: extern "C" fn(
+        *const Interpreter,
+        *const c_void,
+        *mut c_void,
+        *const c_char,
+        c_int,
+    ) -> c_int, // 635
+    Tcl_FreeInternalRep: extern "C" fn(*mut RawObject),                          // 636
+    Tcl_InitStringRep: extern "C" fn(*mut RawObject, *const c_char, usize) -> *mut c_void, // 637
+    Tcl_FetchInternalRep: extern "C" fn(*mut RawObject, *const ObjectType) -> *mut c_void, // 638
+    Tcl_StoreInternalRep: extern "C" fn(*mut RawObject, *const ObjectType, *const c_void), // 639
+    Tcl_HasStringRep: extern "C" fn(*mut RawObject) -> c_int,                    // 640
+    Tcl_IncrRefCount: extern "C" fn(*mut RawObject),                             // 641
+    Tcl_DecrRefCount: extern "C" fn(*mut RawObject),                             // 642
+    Tcl_IsShared: extern "C" fn(*mut RawObject) -> c_int,                        // 643
+    Tcl_LinkArray:
+        extern "C" fn(*const Interpreter, *const c_char, *mut c_void, c_int, usize) -> c_int, // 644
+    Tcl_GetIntForIndex:
+        extern "C" fn(*const Interpreter, *mut RawObject, usize, *mut c_void) -> c_int, // 645
+    Tcl_UtfToUniChar: extern "C" fn(*const c_char, *mut c_void) -> usize,        // 646
+    Tcl_UniCharToUtfDString: extern "C" fn(*const c_void, usize, *mut c_void) -> *mut c_void, // 647
+    Tcl_UtfToUniCharDString: extern "C" fn(*const c_char, usize, *mut c_void) -> *mut c_void, // 648
+    TclGetBytesFromObj:
+        extern "C" fn(*const Interpreter, *mut RawObject, *mut c_void) -> *mut c_void, // 649
+    Tcl_GetBytesFromObj:
+        extern "C" fn(*const Interpreter, *mut RawObject, *mut c_void) -> *mut c_void, // 650
+    Tcl_GetStringFromObj: extern "C" fn(*mut RawObject, *mut c_void) -> *mut c_void, // 651
+    Tcl_GetUnicodeFromObj: extern "C" fn(*mut RawObject, *mut c_void) -> *mut c_void, // 652
+    Tcl_GetSizeIntFromObj: extern "C" fn(*const Interpreter, *mut RawObject, *mut c_void) -> c_int, // 653
+    Tcl_UtfCharComplete: extern "C" fn(*const c_char, usize) -> c_int, // 654
+    Tcl_UtfNext: extern "C" fn(*const c_char) -> *const c_char,        // 655
+    Tcl_UtfPrev: extern "C" fn(*const c_char, *const c_char) -> *const c_char, // 656
+    Tcl_FSTildeExpand: extern "C" fn(*const Interpreter, *const c_char, *mut c_void) -> c_int, // 657
+    Tcl_ExternalToUtfDStringEx: extern "C" fn(
+        *const Interpreter,
+        *mut c_void,
+        *const c_char,
+        usize,
+        c_int,
+        *mut c_void,
+        *mut c_void,
+    ) -> c_int, // 658
+    Tcl_UtfToExternalDStringEx: extern "C" fn(
+        *const Interpreter,
+        *mut c_void,
+        *const c_char,
+        usize,
+        c_int,
+        *mut c_void,
+        *mut c_void,
+    ) -> c_int, // 659
+    Tcl_AsyncMarkFromSignal: extern "C" fn(*mut c_void, c_int) -> c_int, // 660
+    Tcl_ListObjGetElements:
+        extern "C" fn(*const Interpreter, *mut RawObject, *mut c_void, *mut c_void) -> c_int, // 661
+    Tcl_ListObjLength: extern "C" fn(*const Interpreter, *mut RawObject, *mut c_void) -> c_int, // 662
+    Tcl_DictObjSize: extern "C" fn(*const Interpreter, *mut RawObject, *mut c_void) -> c_int, // 663
+    Tcl_SplitList:
+        extern "C" fn(*const Interpreter, *const c_char, *mut c_void, *const c_void) -> c_int, // 664
+    Tcl_SplitPath: extern "C" fn(*const c_char, *mut c_void, *const c_void), // 665
+    Tcl_FSSplitPath: extern "C" fn(*mut RawObject, *mut c_void) -> *mut RawObject, // 666
+    Tcl_ParseArgsObjv: extern "C" fn(
+        *const Interpreter,
+        *const c_void,
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+    ) -> c_int, // 667
+    Tcl_UniCharLen: extern "C" fn(*const c_void) -> usize,                   // 668
+    Tcl_NumUtfChars: extern "C" fn(*const c_char, usize) -> usize,           // 669
+    Tcl_GetCharLength: extern "C" fn(*mut RawObject) -> usize,               // 670
+    Tcl_UtfAtIndex: extern "C" fn(*const c_char, usize) -> *const c_char,    // 671
+    Tcl_GetRange: extern "C" fn(*mut RawObject, usize, usize) -> *mut RawObject, // 672
+    Tcl_GetUniChar: extern "C" fn(*mut RawObject, usize) -> c_int,           // 673
+    Tcl_GetBool: extern "C" fn(*const Interpreter, *const c_char, c_int, *mut c_void) -> c_int, // 674
+    Tcl_GetBoolFromObj:
+        extern "C" fn(*const Interpreter, *mut RawObject, c_int, *mut c_void) -> c_int, // 675
+    Tcl_CreateObjCommand2: extern "C" fn(
+        *const Interpreter,
+        *const c_char,
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+    ) -> *mut c_void, // 676
+    Tcl_CreateObjTrace2: extern "C" fn(
+        *const Interpreter,
+        usize,
+        c_int,
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+    ) -> *mut c_void, // 677
+    Tcl_NRCreateCommand2: extern "C" fn(
+        *const Interpreter,
+        *const c_char,
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+    ) -> *mut c_void, // 678
+    Tcl_NRCallObjProc2:
+        extern "C" fn(*const Interpreter, *mut c_void, *mut c_void, usize, *mut c_void) -> c_int, // 679
+    Tcl_GetNumberFromObj:
+        extern "C" fn(*const Interpreter, *mut RawObject, *mut c_void, *mut c_void) -> c_int, // 680
+    Tcl_GetNumber:
+        extern "C" fn(*const Interpreter, *const c_char, usize, *mut c_void, *mut c_void) -> c_int, // 681
+    Tcl_RemoveChannelMode: extern "C" fn(*const Interpreter, *mut c_void, c_int) -> c_int, // 682
+    Tcl_GetEncodingNulLength: extern "C" fn(*mut c_void) -> usize,                         // 683
+    Tcl_GetWideUIntFromObj: extern "C" fn(*const Interpreter, *mut RawObject, *mut c_void) -> c_int, // 684
+    Tcl_DStringToObj: extern "C" fn(*mut c_void) -> *mut RawObject, // 685
+    Tcl_UtfNcmp: extern "C" fn(*const c_char, *const c_char, *mut c_void) -> c_int, // 686
+    Tcl_UtfNcasecmp: extern "C" fn(*const c_char, *const c_char, *mut c_void) -> c_int, // 687
+    Tcl_NewWideUIntObj: extern "C" fn(*mut c_void) -> *mut RawObject, // 688
+    Tcl_SetWideUIntObj: extern "C" fn(*mut RawObject, *mut c_void), // 689
 }
 
 /// Error codes for unwrapping a Tcl interpreter.
@@ -780,30 +1206,23 @@ impl<'a> Interpreter {
                 .as_ref()
                 .expect("stubs missing after initial check");
 
-            ALLOC = Some(stubs.attempt_alloc);
-            REALLOC = Some(stubs.attempt_realloc);
-            FREE = Some(stubs.free);
+            ALLOC = Some(stubs.Tcl_AttemptAlloc);
+            REALLOC = Some(stubs.Tcl_AttemptRealloc);
+            FREE = Some(stubs.Tcl_Free);
 
-            NEW_OBJ = Some(stubs.new_obj);
-            FREE_OBJ = Some(stubs.free_obj);
-            DUPLICATE_OBJ = Some(stubs.duplicate_obj);
-            if let Some(f) = stubs.incr_ref_count {
-                INCR_REF_COUNT = f;
-            }
-            if let Some(f) = stubs.decr_ref_count {
-                DECR_REF_COUNT = f;
-            }
-            if let Some(f) = stubs.is_shared {
-                IS_SHARED = f;
-            }
-            INVALIDATE_STRING_REP = Some(stubs.invalidate_string_rep);
-            GET_STRING = Some(stubs.get_string);
+            NEW_OBJ = Some(stubs.Tcl_NewObj);
+            DUPLICATE_OBJ = Some(stubs.Tcl_DuplicateObj);
+            INCR_REF_COUNT = Some(stubs.Tcl_IncrRefCount);
+            DECR_REF_COUNT = Some(stubs.Tcl_DecrRefCount);
+            IS_SHARED = Some(stubs.Tcl_IsShared);
+            INVALIDATE_STRING_REP = Some(stubs.Tcl_InvalidateStringRep);
+            GET_STRING = Some(stubs.Tcl_GetString);
 
-            GET_OBJ_TYPE = Some(stubs.get_obj_type);
-            CONVERT_TO_TYPE = Some(stubs.convert_to_type);
+            GET_OBJ_TYPE = Some(stubs.Tcl_GetObjType);
+            CONVERT_TO_TYPE = Some(stubs.Tcl_ConvertToType);
 
-            NEW_STRING_OBJ = Some(stubs.new_string_obj);
-            SET_STRING_OBJ = Some(stubs.set_string_obj);
+            NEW_STRING_OBJ = Some(stubs.Tcl_NewStringObj);
+            SET_STRING_OBJ = Some(stubs.Tcl_SetStringObj);
         }
     }
 
@@ -818,7 +1237,7 @@ impl<'a> Interpreter {
                 .stubs
                 .as_ref()
                 .expect("stubs missing after initial check")
-                .pkg_provide_ex)(
+                .Tcl_PkgProvideEx)(
                 self as *const Interpreter,
                 name.as_ptr(),
                 version.as_ptr(),
@@ -868,12 +1287,12 @@ impl<'a> Interpreter {
                 .stubs
                 .as_ref()
                 .expect("stubs missing after initial check")
-                .create_command)(
+                .Tcl_CreateCommand)(
                 self as *const Interpreter,
                 name.as_ptr(),
-                wrapper_proc as *const c_void,
-                proc as *const c_void,
-                std::ptr::null() as *const c_void,
+                wrapper_proc as *mut c_void,
+                proc as *mut c_void,
+                std::ptr::null_mut::<c_void>(),
             )
         };
 
@@ -916,12 +1335,12 @@ impl<'a> Interpreter {
                 .stubs
                 .as_ref()
                 .expect("stubs missing after initial check")
-                .create_obj_command)(
+                .Tcl_CreateObjCommand)(
                 self as *const Interpreter,
                 name.as_ptr(),
-                wrapper_proc as *const c_void,
-                proc as *const c_void,
-                std::ptr::null() as *const c_void,
+                wrapper_proc as *mut c_void,
+                proc as *mut c_void,
+                std::ptr::null_mut::<c_void>(),
             )
         };
 
@@ -935,7 +1354,7 @@ impl<'a> Interpreter {
                 .stubs
                 .as_ref()
                 .expect("stubs missing after initial check")
-                .register_obj_type)(T::tcl_type() as *const ObjectType)
+                .Tcl_RegisterObjType)(T::tcl_type() as *const ObjectType)
         }
     }
 
@@ -953,7 +1372,7 @@ impl<'a> Interpreter {
                 .stubs
                 .as_ref()
                 .expect("stubs missing after initial check")
-                .delete_command)(self as *const Interpreter, name.as_ptr())
+                .Tcl_DeleteCommand)(self as *const Interpreter, name.as_ptr())
         };
 
         Ok(ret == 0)
@@ -966,7 +1385,9 @@ impl<'a> Interpreter {
                 .stubs
                 .as_ref()
                 .expect("stubs missing after initial check")
-                .get_obj_result)(self as *const Interpreter))
+                .Tcl_GetObjResult)(
+                self as *const Interpreter
+            ))
         }
     }
 
@@ -987,7 +1408,7 @@ impl<'a> Interpreter {
                 .stubs
                 .as_ref()
                 .expect("stubs missing after initial check")
-                .eval_ex)(
+                .Tcl_EvalEx)(
                 self as *const Interpreter,
                 script.as_ptr() as *const c_char,
                 script.len(),
@@ -995,7 +1416,7 @@ impl<'a> Interpreter {
             )
         };
         let result = self.get_obj_result();
-        if status == TclStatus::Error {
+        if TclStatus::Error == status.into() {
             Err(result)
         } else {
             Ok(result)
@@ -1017,17 +1438,8 @@ impl<'a> Interpreter {
             *terminator = 0;
         }
 
-        unsafe {
-            (self
-                .stubs
-                .as_ref()
-                .expect("stubs missing after initial check")
-                .set_result)(
-                self as *const Interpreter,
-                tcl_str.as_ptr() as *const c_char,
-                TCL_DYNAMIC,
-            )
-        }
+        let result = Object::new_string(text);
+        self.set_obj_result(&result);
     }
 
     pub fn set_obj_result(&self, result: &Object) {
@@ -1036,7 +1448,7 @@ impl<'a> Interpreter {
                 .stubs
                 .as_ref()
                 .expect("stubs missing after initial check")
-                .set_obj_result)(
+                .Tcl_SetObjResult)(
                 self as *const Interpreter, result.obj as *mut RawObject
             )
         }
@@ -1058,7 +1470,7 @@ impl<'a> Interpreter {
                 .stubs
                 .as_ref()
                 .expect("stubs missing after initial check")
-                .attempt_alloc)(size)
+                .Tcl_AttemptAlloc)(size)
         };
 
         if ptr.is_null() {
@@ -1066,7 +1478,7 @@ impl<'a> Interpreter {
         } else {
             unsafe {
                 // We've checked that it is not null and therefore trust Tcl
-                Some(std::slice::from_raw_parts_mut(ptr, size))
+                Some(std::slice::from_raw_parts_mut(ptr as *mut u8, size))
             }
         }
     }
@@ -1176,7 +1588,9 @@ impl<T> StatefulCommand<T> {
             // This relies on Tcl to properly track the command state and
             // invoke this at the appropriate moment.  Retaking ownership
             // of the underlying pointer ensures the destructor gets called
-            unsafe { Box::from_raw(state) };
+            unsafe {
+                let _ = Box::from_raw(state);
+            };
         }
 
         unsafe {
@@ -1184,12 +1598,12 @@ impl<T> StatefulCommand<T> {
                 .stubs
                 .as_ref()
                 .expect("stubs missing after initial check")
-                .create_command)(
+                .Tcl_CreateCommand)(
                 interp as *const Interpreter,
                 name.as_ptr(),
-                wrapper_proc::<T> as *const c_void,
-                Box::<StatefulCommand<T>>::into_raw(state) as *const c_void,
-                free_state::<T> as *const c_void,
+                wrapper_proc::<T> as *mut c_void,
+                Box::<StatefulCommand<T>>::into_raw(state) as *mut c_void,
+                free_state::<T> as *mut c_void,
             )
         };
 

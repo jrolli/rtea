@@ -18,6 +18,22 @@ fn test_init(interp: &Interpreter) -> Result<TclStatus, String> {
 }
 
 #[test]
+fn interpreter() -> Result<(), String> {
+    let test_interp = TestInterpreter::new();
+    test_interp.as_ref().init_global_functions();
+
+    assert_eq!(
+        test_interp
+        .as_ref()
+        .eval("return $tcl_version")
+        .expect("interp failed to return result")
+        .get_string()
+        .to_string()
+        , "9.0");
+    Ok(())
+}
+
+#[test]
 fn init_wrapper() -> Result<(), String> {
     let test_interp = TestInterpreter::new();
     assert_eq!(RteaTest_Init(test_interp.as_ptr()), TclStatus::Ok);

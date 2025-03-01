@@ -1,12 +1,13 @@
 use rtea::*;
 
-#[link(name = "tcl")]
-extern "C" {
+#[link(name = "tcl9.0")]
+unsafe extern "C" {
     // fn Tcl_FindExecutable(name: *const c_char);
     fn Tcl_CreateInterp() -> *mut Interpreter;
     fn Tcl_DeleteInterp(interp: *mut Interpreter);
 }
 
+#[derive(Debug)]
 pub struct TestInterpreter {
     interp: *mut Interpreter,
 }
@@ -29,6 +30,7 @@ impl TestInterpreter {
     }
 
     pub fn as_ref(&self) -> &Interpreter {
-        Interpreter::from_raw(self.as_ptr()).unwrap()
+        let tmp = Interpreter::from_raw(self.as_ptr());
+        tmp.unwrap()
     }
 }
