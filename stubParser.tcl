@@ -1,3 +1,30 @@
+# stubParser.tcl -- Regenerate the Tcl stubs vtable in src/interpreter.rs
+#
+# This script reads a Tcl stubs declaration file (tcl.decls) and rewrites the
+# `Stubs` struct in src/interpreter.rs with an up-to-date vtable derived
+# directly from the Tcl source tree.
+#
+# How it works:
+#   1. The script sources the given .decls file, which calls back into the
+#      procs defined here (library, interface, hooks, declare, etc.) -- the
+#      same protocol used by Tcl's own genStubs.tcl tooling.
+#   2. Each `declare` call is recorded in the `interfaces(tcl)` dict, keyed
+#      by slot number.  Slots present in the dict become typed `extern "C" fn`
+#      fields; absent slots become `_deprecated_N: *const c_void` placeholders.
+#   3. C types are translated to Rust FFI types by `convertstub` (e.g.
+#      `char *` -> `*mut c_char`, `Tcl_Interp *` -> `*const Interpreter`).
+#   4. The generated struct replaces the region of src/interpreter.rs that is
+#      delimited by the sentinel comments:
+#          // BEGIN STUBS VTABLE
+#          // END STUBS VTABLE
+#      Everything outside those sentinels is left untouched.
+#
+# Usage:
+#   tclsh stubParser.tcl /path/to/tcl/generic/tcl.decls
+#
+# Example (from the rtea project root, with the Tcl source tree alongside):
+#   tclsh stubParser.tcl ../tcl/tcl/generic/tcl.decls
+
 namespace eval rteaStub {
     variable crateName "UNKNOWN"
     array set interfaces {}
@@ -5,7 +32,7 @@ namespace eval rteaStub {
     array set hooks {}
     array set stubs {}
 
-    variable srcDir .
+    variable srcDir [file dirname [file normalize [info script]]]
 }
 
 proc rteaStub::library {name} {
@@ -84,7 +111,6 @@ proc rteaStub::declare {args} {
 
     if {[llength $args] == 2} {
         set func [rteaStub::parsedecl [lindex $args 1]]
-        # puts $func
         dict set iface [lindex $args 0] [list generic $func]
     } elseif {[llength $args] == 3} {
         set func [rteaStub::parsedecl [lindex $args 2]]
@@ -98,15 +124,10 @@ proc rteaStub::declare {args} {
         return
     }
 
-    # puts $currIface
-
     foreach {var item} $iface {
         set platform [lindex $item 0]
         set arg item[lindex $item 1]
-        # puts "var:$var platform:$platform arg:$arg"
     }
-    # puts $iface
-    # return
     set interfaces($currIface) $iface
 }
 
@@ -114,54 +135,121 @@ proc rteaStub::export {args} {}
 
 proc rteaStub::init {} {
     global argv argv0
-    # rteaStub::interface "DEFAULT"
 
     foreach file $argv {source -encoding utf-8 $file}
 }
 
-proc rteaStub::finalize {} {
+proc rteaStub::generate_vtable {} {
     variable interfaces
 
-    set max 0
     set genDefs [lindex [array get interfaces "tcl"] 1]
+    set lines {}
 
-    dict set defaults 0 0
+    lappend lines "#\[repr(C)\]"
+    lappend lines "#\[allow(non_snake_case)\]"
+    lappend lines "#\[derive(Debug)\]"
+    lappend lines "struct Stubs \{"
+    lappend lines "    magic: u32,"
+    lappend lines "    hooks: *const c_void,"
 
-    # Output the vtable for `interpreter.rs`
-    for  {set i 0} {$i < 700} {incr i} {
+    for {set i 0} {$i < 1000} {incr i} {
         if {[dict exists $genDefs $i]} {
             set decl [dict get $genDefs $i]
-            if {[string match generic* [lindex $decl]]} {
+            if {[string match generic* [lindex $decl 0]]} {
                 set info [lindex $decl 1]
+
                 if {[lindex $info 0] == "TCL_NORTETURN"} {
                     set retString " -> !"
                 } elseif {[lindex $info 1] == "UNUSED"} {
                     set retString ""
                 } else {
-                    set retString [lindex $info 1]
-                    set retString " -> $retString"
+                    set retString " -> [lindex $info 1]"
                 }
+
                 set name [lindex $info 2]
-                set params [lindex $info 3]
 
                 if {$name == "TclUnusedStubEntry"} break
 
+                set params [lindex $info 3]
                 set param_string ""
                 foreach param $params {
-                    if {"$param_string" != ""} {set param_string "$param_string, "}
-                    set param_string "$param_string[lindex $param 0]"
+                    if {$param_string ne ""} {append param_string ", "}
+                    append param_string [lindex $param 0]
                 }
 
-                puts "    $name: extern \"C\" fn($param_string)$retString, // $i"
+                lappend lines "    $name: extern \"C\" fn($param_string)$retString, // $i"
             } else {
-                puts "     _untranslated_$i: *const c_void, // $i"
+                lappend lines "     _untranslated_$i: *const c_void, // $i"
             }
         } else {
-            puts "     _deprecated_$i: *const c_void, // $i"
+            lappend lines "     _deprecated_$i: *const c_void, // $i"
         }
     }
 
-    # Output the internal function pointers for 
+    lappend lines "\}"
+
+    return [join $lines "\n"]
+}
+
+proc rteaStub::finalize {} {
+    variable srcDir
+
+    set targetFile [file join $srcDir src interpreter.rs]
+
+    if {![file exists $targetFile]} {
+        puts stderr "error: cannot find $targetFile"
+        exit 1
+    }
+
+    # Read the existing file
+    set fd [open $targetFile r]
+    fconfigure $fd -encoding utf-8
+    set content [read $fd]
+    close $fd
+
+    set lines [split $content "\n"]
+
+    # Locate the sentinel lines
+    set beginIdx -1
+    set endIdx   -1
+    for {set i 0} {$i < [llength $lines]} {incr i} {
+        set line [lindex $lines $i]
+        if {[string match "// BEGIN STUBS VTABLE*" $line]} {
+            set beginIdx $i
+        } elseif {$line eq "// END STUBS VTABLE"} {
+            set endIdx $i
+            break
+        }
+    }
+
+    if {$beginIdx == -1} {
+        puts stderr "error: could not find '// BEGIN STUBS VTABLE' sentinel in $targetFile"
+        exit 1
+    }
+    if {$endIdx == -1} {
+        puts stderr "error: could not find '// END STUBS VTABLE' sentinel in $targetFile"
+        exit 1
+    }
+    if {$endIdx <= $beginIdx} {
+        puts stderr "error: END sentinel appears before BEGIN sentinel in $targetFile"
+        exit 1
+    }
+
+    # Build the replacement: keep the sentinels, replace everything between them
+    set before  [lrange $lines 0 $beginIdx]
+    set after   [lrange $lines $endIdx end]
+    set vtable  [generate_vtable]
+
+    set newLines [concat $before [split $vtable "\n"] $after]
+    set newContent [join $newLines "\n"]
+
+    # Write the updated file back
+    set fd [open $targetFile w]
+    fconfigure $fd -encoding utf-8
+    puts -nonewline $fd $newContent
+    close $fd
+
+    puts "Updated Stubs vtable in $targetFile"
 }
 
 rteaStub::init
