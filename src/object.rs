@@ -148,10 +148,6 @@ pub trait TclObjectType: Clone + Display {
 
     fn tcl_type() -> &'static ObjectType;
 
-    fn as_string(&self) -> String {
-        format!("{}", self)
-    }
-
     fn convert(obj: Object) -> Result<Object, Object> {
         Err(obj)
     }

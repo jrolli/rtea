@@ -304,7 +304,7 @@ pub fn generate_tcl_object(item: TokenStream) -> TokenStream {
                 extern "C" fn {obj_name}_tcl_update(obj: *mut RawObject) {{
                     unsafe {{
                         let inner = ((*obj).ptr1 as *mut {obj_name}).as_ref().unwrap();
-                        let (tcl_str, tcl_str_len) = rtea::tcl_string(&inner.as_string()).into_raw_parts();
+                        let (tcl_str, tcl_str_len) = rtea::tcl_string(&inner.to_string()).into_raw_parts();
                         (*obj).bytes = tcl_str;
                         (*obj).length = tcl_str_len as usize;
                     }}
