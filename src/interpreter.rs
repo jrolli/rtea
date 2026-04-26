@@ -1,3 +1,4 @@
+use crate::tcl::TclBuf;
 use std::ffi::CString;
 use std::ffi::c_double;
 use std::ffi::c_int;
@@ -1442,8 +1443,7 @@ impl<'a> Interpreter {
     /// for certain interfaces (e.g., bytes representation of Tcl objects)
     /// and convenient for others (e.g., creating a Nul terminated string
     /// from a Rust `String`).
-    #[allow(clippy::mut_from_ref)] // slice is from Tcl-allocated memory, not derived from self
-    pub fn alloc(&self, size: usize) -> Option<&mut [u8]> {
+    pub fn alloc(&self, size: usize) -> Option<TclBuf> {
         if size >= 1 << 32 {
             return None;
         }
@@ -1459,10 +1459,8 @@ impl<'a> Interpreter {
         if ptr.is_null() {
             None
         } else {
-            unsafe {
-                // We've checked that it is not null and therefore trust Tcl
-                Some(std::slice::from_raw_parts_mut(ptr as *mut u8, size))
-            }
+            // Safety: ptr is non-null, Tcl-allocated, and we are taking sole ownership.
+            Some(unsafe { TclBuf::from_raw_parts(ptr as *mut u8, size) })
         }
     }
 }
