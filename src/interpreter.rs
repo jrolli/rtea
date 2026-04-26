@@ -78,7 +78,9 @@ pub enum TclUnloadFlag {
     DetachFromProcess = 1 << 1,
 }
 
+#[allow(clippy::zero_ptr)] // Tcl sentinel: TCL_STATIC is literally a null pointer
 const _TCL_STATIC: *const c_void = 0 as *const c_void;
+#[allow(clippy::manual_dangling_ptr)] // Tcl sentinel: TCL_VOLATILE is literally the value 1, not a dangling pointer
 const _TCL_VOLATILE: *const c_void = 1 as *const c_void;
 const _TCL_DYNAMIC: *const c_void = 3 as *const c_void;
 
