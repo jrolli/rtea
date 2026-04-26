@@ -1175,6 +1175,19 @@ pub enum Error {
     TclError(String),
 }
 
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::NullInterpreter => write!(f, "interpreter pointer was null"),
+            Error::NullStubs => write!(f, "stubs pointer was null"),
+            Error::InvalidStubs => write!(f, "stubs magic number did not match expected value"),
+            Error::TclError(msg) => write!(f, "Tcl error: {msg}"),
+        }
+    }
+}
+
+impl std::error::Error for Error {}
+
 impl<'a> Interpreter {
     /// Converts a raw pointer to a Tcl interpreter into a Rust reference.
     ///
