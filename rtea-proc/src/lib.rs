@@ -3,7 +3,7 @@
 //!
 //! The library provides the simple macros to conveniently wrap Rust
 //! initialization and unload functions without having to deal with
-//! `extern "C"` or raw pointers.  
+//! `extern "C"` or raw pointers.
 //!
 //! # Example
 //!
@@ -54,16 +54,16 @@ fn module_init_common(prefix: &str, attr: TokenStream, item: TokenStream) -> Tok
         if let Punct(_) = a {
             continue;
         }
-        if mod_name == None {
+        if mod_name.is_none() {
             mod_name = Some(a.to_string());
-        } else if version == None {
+        } else if version.is_none() {
             version = Some(a.to_string());
         } else {
             panic!("Unexpected additional attributes to 'module_init': {}", a)
         }
     }
     let mod_name = mod_name.expect("no module name found");
-    let version = version.unwrap_or("".to_string());
+    let version = version.unwrap_or_default();
 
     let mut out_stream = TokenStream::new();
 
@@ -187,7 +187,7 @@ pub fn module_safe_init(attr: TokenStream, item: TokenStream) -> TokenStream {
 fn module_unload_common(prefix: &str, attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut mod_name = None;
     for a in attr {
-        if mod_name == None {
+        if mod_name.is_none() {
             mod_name = Some(a.to_string());
         } else {
             panic!("Unexpected additional attributes to 'module_init': {}", a)
@@ -323,9 +323,10 @@ pub fn generate_tcl_object(item: TokenStream) -> TokenStream {
                         }}
                     }};
 
-                    if res == TclStatus::Error && interp.is_some() {{
-                        let interp = interp.unwrap();
-                        interp.set_result("could not convert to '{obj_name}' type")
+                    if res == TclStatus::Error {{
+                        if let Some(interp) = interp {{
+                            interp.set_result("could not convert to '{obj_name}' type")
+                        }}
                     }}
 
                     res

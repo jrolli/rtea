@@ -1,5 +1,6 @@
 target/
 
+.cargo
 *.sublime*
 Cargo.lock
 

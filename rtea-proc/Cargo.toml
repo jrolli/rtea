@@ -7,7 +7,7 @@ repository = "https://github.com/jrolli/rtea"
 documentation = "https://docs.rs/rtea-proc/"
 description = "Internal macro crate for rtea."
 readme = "README.md"
-edition = "2018"
+edition = "2021"
 
 [lib]
 proc_macro = true

@@ -28,7 +28,7 @@ use crate::tcl::*;
 #[derive(Debug)]
 pub struct Interpreter {
     _legacy_result: *const c_void,
-    _legace_free_proc: *const c_void,
+    _legacy_free_proc: *const c_void,
     _error_line: isize,
     stubs: *const Stubs,
 }
@@ -69,12 +69,12 @@ impl From<i32> for TclStatus {
 /// A wrapper for values passed to Tcl's [unload](https://www.tcl.tk/man/tcl/TclCmd/unload.html) function.
 #[repr(isize)]
 pub enum TclUnloadFlag {
-    /// Inidicates the interpreter is exiting but that the module's code is
+    /// Indicates the interpreter is exiting but that the module's code is
     /// not being unmapped.
     DetachFromInterpreter = 1 << 0,
-    /// Inidicates the last interpreter is detaching and the module is about
+    /// Indicates the last interpreter is detaching and the module is about
     /// to be unmapped from the process.
-    DetachFromProcesss = 1 << 1,
+    DetachFromProcess = 1 << 1,
 }
 
 const _TCL_STATIC: *const c_void = 0 as *const c_void;
@@ -1178,27 +1178,21 @@ impl<'a> Interpreter {
     /// Most users should not need to use this function because a reference is
     /// already passed to the appropriate functions.  This is public because
     /// of how the [module_init](rtea_proc::module_init) macro works.
+    #[allow(clippy::not_unsafe_ptr_arg_deref)]
     pub fn from_raw(interpreter: *const Interpreter) -> Result<&'a Interpreter, Error> {
-        if let Some(interpreter) = unsafe { interpreter.as_ref() } {
-            if let Some(stubs) = unsafe { interpreter.stubs.as_ref() } {
-                if stubs.magic == TCL_STUB_MAGIC {
-                    Ok(interpreter)
-                } else {
-                    Err(Error::InvalidStubs)
-                }
-            } else {
-                Err(Error::NullStubs)
-            }
-        } else {
-            Err(Error::NullInterpreter)
+        let interpreter = unsafe { interpreter.as_ref() }.ok_or(Error::NullInterpreter)?;
+        let stubs = unsafe { interpreter.stubs.as_ref() }.ok_or(Error::NullStubs)?;
+        if stubs.magic != TCL_STUB_MAGIC {
+            return Err(Error::InvalidStubs);
         }
+        Ok(interpreter)
     }
 
     /// DO NOT USE THIS FUNCTION.
     ///
     /// This function is only public so that it can be called by the
     /// [module_init](rtea_proc::module_init) macro for derivative RTEA
-    /// projects..
+    /// projects.
     pub fn init_global_functions(&self) {
         unsafe {
             let stubs = self
@@ -1428,16 +1422,6 @@ impl<'a> Interpreter {
     /// When inside command logic, this can be used to set the return value
     /// visible to the invoking Tcl script.
     pub fn set_result(&self, text: &str) {
-        let tcl_str = self
-            .alloc(text.len() + 1)
-            .expect("propagating memory failure in Tcl");
-
-        tcl_str[..text.len()].copy_from_slice(text.as_bytes());
-
-        if let Some(terminator) = tcl_str.last_mut() {
-            *terminator = 0;
-        }
-
         let result = Object::new_string(text);
         self.set_obj_result(&result);
     }
@@ -1448,9 +1432,7 @@ impl<'a> Interpreter {
                 .stubs
                 .as_ref()
                 .expect("stubs missing after initial check")
-                .Tcl_SetObjResult)(
-                self as *const Interpreter, result.obj as *mut RawObject
-            )
+                .Tcl_SetObjResult)(self as *const Interpreter, result.obj)
         }
     }
 
@@ -1460,6 +1442,7 @@ impl<'a> Interpreter {
     /// for certain interfaces (e.g., bytes representation of Tcl objects)
     /// and convenient for others (e.g., creating a Nul terminated string
     /// from a Rust `String`).
+    #[allow(clippy::mut_from_ref)] // slice is from Tcl-allocated memory, not derived from self
     pub fn alloc(&self, size: usize) -> Option<&mut [u8]> {
         if size >= 1 << 32 {
             return None;
@@ -1517,7 +1500,7 @@ type CmdDataProc<T> =
 ///
 ///     let c = StatefulCommand::new(cmd, RefCell::<usize>::new(0));
 ///     c.attach_command(interp, "counter").unwrap();
-///     
+///
 ///     for i in 0..10 {
 ///         interp.eval("counter").unwrap();
 ///         assert_eq!(i.to_string(), interp.get_obj_result().get_string());
@@ -1538,10 +1521,7 @@ impl<T> StatefulCommand<T> {
     /// any concurrency from Tcl is safe on `data` (there are no concerns for
     /// `proc`).
     pub fn new(proc: CmdDataProc<T>, data: T) -> StatefulCommand<T> {
-        StatefulCommand::<T> {
-            proc: proc,
-            data: data,
-        }
+        StatefulCommand { proc, data }
     }
 
     /// Attaches the `StatefulCommand` to a Tcl interpreter.

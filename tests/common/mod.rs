@@ -18,6 +18,12 @@ impl Drop for TestInterpreter {
     }
 }
 
+impl Default for TestInterpreter {
+    fn default() -> Self {
+        TestInterpreter::new()
+    }
+}
+
 impl TestInterpreter {
     pub fn new() -> TestInterpreter {
         let raw_interp = unsafe { Tcl_CreateInterp() };
@@ -30,7 +36,6 @@ impl TestInterpreter {
     }
 
     pub fn as_ref(&self) -> &Interpreter {
-        let tmp = Interpreter::from_raw(self.as_ptr());
-        tmp.unwrap()
+        Interpreter::from_raw(self.as_ptr()).expect("TestInterpreter holds a valid interpreter")
     }
 }

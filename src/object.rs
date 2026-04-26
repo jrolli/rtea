@@ -24,18 +24,20 @@ pub struct RawObject {
 
 impl RawObject {
     pub fn wrap(obj: *mut RawObject) -> Object {
-        unsafe { 
-            INCR_REF_COUNT
-            .expect("module must have been initialized")
-            (obj)
-        };
-        Object { obj: obj }
+        unsafe { INCR_REF_COUNT.expect("module must have been initialized")(obj) };
+        Object { obj }
     }
 }
 
 #[derive(Debug)]
 pub struct Object {
     pub obj: *mut RawObject,
+}
+
+impl Default for Object {
+    fn default() -> Self {
+        Object::new()
+    }
 }
 
 impl Object {
@@ -47,8 +49,8 @@ impl Object {
         let cstr = CString::new(s).expect("Unexpected NulError!");
         unsafe {
             RawObject::wrap(NEW_STRING_OBJ.expect("module must have been initialized")(
-                cstr.as_ptr() as *const i8,
-                cstr.as_bytes().len() as usize,
+                cstr.as_ptr(),
+                cstr.as_bytes().len(),
             ))
         }
     }
@@ -58,8 +60,8 @@ impl Object {
         unsafe {
             SET_STRING_OBJ.expect("module must have been initialized")(
                 self.obj,
-                cstr.as_ptr() as *const i8,
-                cstr.as_bytes().len() as usize,
+                cstr.as_ptr(),
+                cstr.as_bytes().len(),
             );
         }
     }
@@ -111,7 +113,13 @@ impl Display for Object {
                 panic!("invalid string representation and no update function");
             }
 
-            write!(f, "{}", CStr::from_ptr((*self.obj).bytes).to_str().unwrap())
+            write!(
+                f,
+                "{}",
+                CStr::from_ptr((*self.obj).bytes)
+                    .to_str()
+                    .expect("TCL guarantees strings are valid UTF-8")
+            )
         }
     }
 }
